@@ -211,7 +211,29 @@ class WhatsAppBot:
     def ask_claude(self, prompt, session_id=None):
         """
         Envía un prompt a Claude usando el CLI y devuelve la respuesta y session_id
+        Si session_id es inválido, reintenta automáticamente creando una nueva sesión.
         """
+        # Primer intento: usar session_id si existe
+        try:
+            result, new_session_id = self._execute_claude_command(prompt, session_id)
+            if result is not None:  # Éxito
+                return result, new_session_id
+            # Si result es None, el session_id era inválido, reintentar sin session_id
+            logger.info("🔄 Reintentando con nueva sesión...")
+        except Exception as e:
+            logger.error(f"❌ Error en primer intento: {e}")
+
+        # Segundo intento: crear nueva sesión (sin session_id)
+        try:
+            logger.info("🆕 Creando nueva sesión de Claude...")
+            return self._execute_claude_command(prompt, None)
+        except Exception as e:
+            logger.error(f"❌ Error creando nueva sesión: {e}")
+            return "Hubo un error al comunicarme con Claude.", None
+
+    def _execute_claude_command(self, prompt, session_id):
+        """Ejecuta el comando de Claude CLI y devuelve (respuesta, session_id)"""
+        result = None
         try:
             # Construir comando para PowerShell
             if session_id:
@@ -219,7 +241,9 @@ class WhatsAppBot:
             else:
                 ps_script = f'claude -p "{prompt}" --output-format json --dangerously-skip-permissions'
 
-            logger.info(f"🤖 Enviando a Claude: {prompt[:50]}...")
+            logger.info(f"🤖 Comando Claude: {ps_script[:100]}...")
+            if not session_id:
+                logger.info(f"🤖 Enviando a Claude: {prompt[:50]}...")
 
             # Ejecutar comando usando PowerShell
             result = subprocess.run(
@@ -229,6 +253,20 @@ class WhatsAppBot:
                 timeout=300,  # Aumentado a 5 minutos
                 encoding='utf-8'
             )
+
+            # Debug: Ver qué devolvió el comando
+            logger.info(f"🔍 DEBUG - Return code: {result.returncode}")
+            logger.info(f"🔍 DEBUG - stdout length: {len(result.stdout)}")
+            logger.info(f"🔍 DEBUG - stderr length: {len(result.stderr)}")
+            if result.stderr:
+                logger.error(f"🔍 DEBUG - stderr: {result.stderr[:500]}")
+
+            # Si el comando falló (return code != 0), verificar si es session inválido
+            if result.returncode != 0:
+                if "No conversation found" in result.stderr or "session" in result.stderr.lower():
+                    logger.warning("⚠️ Session ID inválido o expirado")
+                    return None, None  # Indica que debe reintentar sin session_id
+                return f"Error del comando Claude: {result.stderr[:200]}", None
 
             # Parsear respuesta JSON
             response = json.loads(result.stdout)
@@ -241,14 +279,19 @@ class WhatsAppBot:
 
         except subprocess.TimeoutExpired:
             logger.error("⏱️ Timeout esperando respuesta de Claude")
-            return "Lo siento, tardé demasiado en responder. Intenta de nuevo.", session_id
+            return "Lo siento, tardé demasiado en responder. Intenta de nuevo.", None
         except json.JSONDecodeError as e:
             logger.error(f"❌ Error parseando JSON de Claude: {e}")
-            logger.error(f"Output: {result.stdout[:500]}")
-            return "Hubo un error procesando la respuesta de Claude.", session_id
+            logger.error(f"Output (stdout): {result.stdout[:500]}")
+            logger.error(f"Output (stderr): {result.stderr[:500]}")
+            # Si es un session_id inválido, devolver None para permitir reintento
+            if result.stderr and "No conversation found" in result.stderr:
+                logger.warning("🔄 Session ID inválido detectado.")
+                return None, None
+            return "Hubo un error procesando la respuesta de Claude.", None
         except Exception as e:
-            logger.error(f"❌ Error comunicando con Claude: {e}")
-            return "Hubo un error al comunicarme con Claude.", session_id
+            logger.error(f"❌ Error ejecutando comando Claude: {e}")
+            return "Hubo un error al comunicarme con Claude.", None
 
     def ask_claude_async(self, chat, client, prompt, session_id, chat_key):
         """
