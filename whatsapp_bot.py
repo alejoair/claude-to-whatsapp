@@ -63,8 +63,9 @@ class WhatsAppBot:
             except:
                 pass
 
-        # Cargar JID guardado si existe
+        # Cargar datos guardados si existen
         self.my_jid = self._load_my_jid()
+        self.my_number = self._load_my_number()  # Cargar número guardado
 
     def _start_notification_thread(self):
         """Inicia el thread de notificaciones periódicas"""
@@ -144,6 +145,21 @@ class WhatsAppBot:
         except Exception as e:
             logger.error(f"❌ Error guardando JID: {e}")
 
+    def _save_my_number(self, number):
+        """Guarda el número del propio usuario"""
+        try:
+            conn = sqlite3.connect(BOT_DB)
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO bot_config (key, value)
+                VALUES ('my_number', ?)
+            """, (str(number),))
+            conn.commit()
+            conn.close()
+            logger.info(f"💾 Número guardado: {number}")
+        except Exception as e:
+            logger.error(f"❌ Error guardando número: {e}")
+
     def _load_my_jid(self):
         """Carga el JID del propio usuario"""
         try:
@@ -157,6 +173,21 @@ class WhatsAppBot:
                 return result[0]
         except Exception as e:
             logger.error(f"❌ Error cargando JID: {e}")
+        return None
+
+    def _load_my_number(self):
+        """Carga el número del propio usuario"""
+        try:
+            conn = sqlite3.connect(BOT_DB)
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM bot_config WHERE key = 'my_number'")
+            result = cursor.fetchone()
+            conn.close()
+            if result:
+                logger.info(f"📱 Número cargado: {result[0]}")
+                return result[0]
+        except Exception as e:
+            logger.error(f"❌ Error cargando número: {e}")
         return None
 
     def load_sessions(self):
@@ -289,7 +320,10 @@ class WhatsAppBot:
         """Evento cuando se completa el emparejamiento"""
         self.my_number = str(message.ID.User)
         self.my_jid = str(message.ID)  # Guardar JID completo
-        self._save_my_jid(self.my_jid)  # Guardar en DB
+
+        # Guardar en DB para futuros reinicios
+        self._save_my_number(self.my_number)
+        self._save_my_jid(self.my_jid)
 
         logger.info(f"✅ Sesión guardada exitosamente")
         logger.info(f"📱 Tu número: {self.my_number}")
@@ -431,14 +465,14 @@ class WhatsAppBot:
                     os.remove(DB_PATH)
                     logger.info("🗑️ Archivo de sesión eliminado")
 
-                # Eliminar también JID guardado
+                # Eliminar también datos guardados
                 if os.path.exists(BOT_DB):
                     conn = sqlite3.connect(BOT_DB)
                     cursor = conn.cursor()
-                    cursor.execute("DELETE FROM bot_config WHERE key = 'my_jid'")
+                    cursor.execute("DELETE FROM bot_config WHERE key IN ('my_jid', 'my_number')")
                     conn.commit()
                     conn.close()
-                    logger.info("🗑️ JID guardado eliminado")
+                    logger.info("🗑️ Datos guardados eliminados")
 
                 # Terminar el programa
                 logger.info("👋 Saliendo...")
