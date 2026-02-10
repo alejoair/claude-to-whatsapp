@@ -33,6 +33,7 @@ from neonize.events import ConnectedEv, PairStatusEv, MessageEv, HistorySyncEv
 # Configuración
 DB_PATH = os.path.join(CONFIG_DIR, "whatsapp_session.db")
 SESSIONS_FILE = os.path.join(CONFIG_DIR, "claude_sessions.json")
+BOT_PREFIX = "🤖🤖🤖 "  # Prefijo para todos los mensajes del bot
 
 
 class WhatsAppBot:
@@ -72,9 +73,9 @@ class WhatsAppBot:
                                 seconds = elapsed % 60
 
                                 if minutes > 0:
-                                    time_msg = f"BOTSYS:⏳ Tiempo transcurrido: {minutes}m {seconds}s"
+                                    time_msg = f"{BOT_PREFIX}BOTSYS:⏳ Tiempo transcurrido: {minutes}m {seconds}s"
                                 else:
-                                    time_msg = f"BOTSYS:⏳ Tiempo transcurrido: {seconds}s"
+                                    time_msg = f"{BOT_PREFIX}BOTSYS:⏳ Tiempo transcurrido: {seconds}s"
 
                                 try:
                                     req_data['client'].send_message(req_data['chat'], time_msg)
@@ -299,7 +300,7 @@ class WhatsAppBot:
         if command == "reload":
             logger.info("🔄 Comando de reinicio recibido. Reiniciando bot...")
             try:
-                client.send_message(chat, "🔄 Reiniciando bot...")
+                client.send_message(chat, f"{BOT_PREFIX}🔄 Reiniciando bot...")
             except:
                 pass
 
@@ -321,18 +322,18 @@ class WhatsAppBot:
 
         elif command == "status":
             try:
-                status_msg = f"📊 Status del Bot:\n"
+                status_msg = f"{BOT_PREFIX}📊 Status del Bot:\n"
                 status_msg += f"• Número: {self.my_number}\n"
                 status_msg += f"• Sesiones: {len(self.load_sessions())}\n"
                 status_msg += f"• DB Path: {DB_PATH}\n"
                 status_msg += f"• Python: {sys.version.split()[0]}"
                 client.send_message(chat, status_msg)
             except Exception as e:
-                client.send_message(chat, f"❌ Error obteniendo status: {e}")
+                client.send_message(chat, f"{BOT_PREFIX}❌ Error obteniendo status: {e}")
             return True
 
         elif command == "help":
-            help_msg = "🤖 Comandos disponibles:\n"
+            help_msg = f"{BOT_PREFIX}🤖 Comandos disponibles:\n"
             help_msg += "• BOTSET:reload - Reinicia el bot\n"
             help_msg += "• BOTSET:status - Muestra el estado del bot\n"
             help_msg += "• BOTSET:help - Muestra esta ayuda\n\n"
@@ -345,7 +346,7 @@ class WhatsAppBot:
 
         else:
             try:
-                client.send_message(chat, f"❌ Comando desconocido: {command}\nUsa BOTSET:help para ver comandos disponibles.")
+                client.send_message(chat, f"{BOT_PREFIX}❌ Comando desconocido: {command}\nUsa BOTSET:help para ver comandos disponibles.")
             except:
                 pass
             return True
