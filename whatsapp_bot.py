@@ -77,7 +77,7 @@ class WhatsAppBot:
                                     time_msg = f"BOTSYS:⏳ Tiempo transcurrido: {seconds}s"
 
                                 try:
-                                    self.client.send_message(req_data['chat'], time_msg)
+                                    req_data['client'].send_message(req_data['chat'], time_msg)
                                     logger.info(f"📤 Notificación de tiempo enviada a {chat_key}: {time_msg}")
                                 except Exception as e:
                                     logger.error(f"❌ Error enviando notificación: {e}")
@@ -192,17 +192,12 @@ class WhatsAppBot:
                 logger.error(f"❌ Error en thread de Claude: {e}")
             finally:
                 # Limpiar solicitud pendiente (siempre ejecutar, incluso si hay error)
-                if chat_key in self.pending_requests:
-                    del self.pending_requests[chat_key]
-                    logger.info(f"✅ Solicitud completada y eliminada para {chat_key}")
+                with self._notification_lock:
+                    if chat_key in self.pending_requests:
+                        del self.pending_requests[chat_key]
+                        logger.info(f"✅ Solicitud completada y eliminada para {chat_key}")
 
-        # Enviar mensaje de estado (con prefijo BOTSYS: para evitar loop)
-        try:
-            client.send_message(chat, "BOTSYS:⏳ Pensando...")
-        except:
-            pass
-
-        # Iniciar thread
+        # Iniciar thread de procesamiento de Claude
         thread = threading.Thread(target=_process, daemon=True)
         thread.start()
 
