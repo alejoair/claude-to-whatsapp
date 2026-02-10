@@ -35,11 +35,11 @@ DB_PATH = os.path.join(CONFIG_DIR, "whatsapp_session.db")
 # SESSIONS_FILE eliminado - session_id ahora se guarda en DB SQLite
 BOT_DB = os.path.join(CONFIG_DIR, "bot_data.db")  # DB adicional para datos del bot
 
-# Header estético para respuestas de Claude (estilo hacker)
-BOT_PREFIX = "╔════════════════════════════════════════╗\n║ 🕵️‍♂️🔓 CLAUDE_ROOT@SYSTEM:~# ║\n╚════════════════════════════════════════╝\n\n"
+# Separador para respuestas de Claude
+BOT_PREFIX = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
 
-# Header minimal para mensajes del sistema (BOTSYS, BOTSET)
-SYS_PREFIX = "⚙️ "
+# Separador para mensajes del sistema (BOTSYS)
+SYS_PREFIX = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
 
 
 class WhatsAppBot:
@@ -403,13 +403,18 @@ class WhatsAppBot:
             msg_source = message.Info.MessageSource
             is_from_me = msg_source.IsFromMe
 
-            logger.info(f"🔍 Filtro: IsFromMe={is_from_me}")
+            # Verificar si es un self-message: debe ser de mí Y sender debe ser igual a chat
+            sender_str = str(sender.User)
+            chat_str = str(chat.User)
+            is_self_message = is_from_me and (sender_str == chat_str)
 
-            if not is_from_me:
-                logger.info(f"❌ Mensaje filtrado: No es un self-message (IsFromMe=False)")
+            logger.info(f"🔍 Filtro: IsFromMe={is_from_me}, sender==chat={sender_str == chat_str}, is_self_message={is_self_message}")
+
+            if not is_self_message:
+                logger.info(f"❌ Mensaje filtrado: No es un self-message (debe ser de ti mismo para ti mismo)")
                 return
 
-            logger.info(f"✅ Mensaje aceptado: Es un self-message (IsFromMe=True)")
+            logger.info(f"✅ Mensaje aceptado: Es un self-message")
 
             # Obtener texto del mensaje
             msg = message.Message
@@ -493,37 +498,21 @@ class WhatsAppBot:
             except Exception as e:
                 logger.debug(f"Nota: {e}")
 
-            # Reiniciar el script usando un batch file wrapper
+            # Reiniciar el script
             try:
-                # Pausa breve para asegurar que el mensaje se envíe
-                time.sleep(0.5)
-
-                # Crear un script temporal de batch que reinicie el bot
-                script_path = os.path.join(CONFIG_DIR, "reload_bot.bat")
-
-                # Obtener la ruta completa del script Python
+                time.sleep(0.2)
                 script_full_path = os.path.abspath(sys.argv[0])
 
-                # Crear batch script que ejecuta el bot
-                with open(script_path, 'w') as f:
-                    # Esperar 2 segundos y luego iniciar el nuevo proceso
-                    f.write(f'@echo off\n')
-                    f.write(f'timeout /t 2 /nobreak > nul\n')
-                    f.write(f'cd /d "{os.getcwd()}"\n')
-                    f.write(f'"{sys.executable}" "{script_full_path}"\n')
-                    f.write(f'del "{script_path}"\n')  # Auto-eliminarse
+                # Comando directo: cambiar al directorio del script y ejecutar
+                cmd = f'cd /d "{os.path.dirname(script_full_path)}" && "{sys.executable}" "{script_full_path}"'
 
-                logger.info(f"📝 Script de reinicio creado: {script_path}")
+                logger.info(f"🔄 Reiniciando...")
 
-                # Iniciar el batch script en nueva ventana
+                # Ejecutar en una nueva ventana de cmd (más confiable)
                 import subprocess
-                subprocess.Popen(['cmd', '/c', script_path],
-                               creationflags=subprocess.CREATE_NEW_CONSOLE)
-
-                logger.info("✅ Proceso de reinicio iniciado. Saliendo...")
+                subprocess.Popen(f'cmd /c {cmd}', creationflags=subprocess.CREATE_NEW_CONSOLE)
 
                 # Salir del proceso actual
-                time.sleep(0.5)
                 os._exit(0)
             except Exception as e:
                 logger.error(f"❌ Error reiniciando: {e}")
@@ -585,18 +574,18 @@ class WhatsAppBot:
         elif command == "status":
             try:
                 session_id = self.load_session_id()
-                status_msg = f"{SYS_PREFIX}📊 Status del Bot:\n"
+                status_msg = f"📊 Status del Bot:\n"
                 status_msg += f"• Número: {self.my_number}\n"
                 status_msg += f"• Session ID: {'✅ Activa' if session_id else '❌ No existe'}\n"
                 status_msg += f"• DB Path: {DB_PATH}\n"
                 status_msg += f"• Python: {sys.version.split()[0]}"
                 client.send_message(chat, status_msg)
             except Exception as e:
-                client.send_message(chat, f"{SYS_PREFIX}❌ Error obteniendo status: {e}")
+                client.send_message(chat, f"❌ Error obteniendo status: {e}")
             return True
 
         elif command == "help":
-            help_msg = f"{SYS_PREFIX}🤖 Comandos disponibles:\n"
+            help_msg = f"🤖 Comandos disponibles:\n"
             help_msg += "• BOTSET:reload - Reinicia el bot\n"
             help_msg += "• BOTSET:logout - Cierra la sesión de WhatsApp\n"
             help_msg += "• BOTSET:status - Muestra el estado del bot\n"
@@ -610,7 +599,7 @@ class WhatsAppBot:
 
         else:
             try:
-                client.send_message(chat, f"{SYS_PREFIX}❌ Comando desconocido: {command}\nUsa BOTSET:help para ver comandos disponibles.")
+                client.send_message(chat, f"❌ Comando desconocido: {command}\nUsa BOTSET:help para ver comandos disponibles.")
             except:
                 pass
             return True
