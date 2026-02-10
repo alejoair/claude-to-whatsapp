@@ -413,6 +413,41 @@ class WhatsAppBot:
             os.execv(sys.executable, [sys.executable] + sys.argv)
             return True
 
+        elif command == "logout":
+            logger.info("🚪 Comando de cierre de sesión recibido...")
+            try:
+                client.send_message(chat, f"{BOT_PREFIX}🚪 Cerrando sesión de WhatsApp...")
+
+                # Detener notification thread
+                self._stop_notification_thread()
+
+                # Detener y desconectar cliente
+                if self.client:
+                    self.client.Logout()
+                    logger.info("✅ Sesión de WhatsApp cerrada")
+
+                # Eliminar archivo de sesión para forzar nuevo pairing
+                if os.path.exists(DB_PATH):
+                    os.remove(DB_PATH)
+                    logger.info("🗑️ Archivo de sesión eliminado")
+
+                # Eliminar también JID guardado
+                if os.path.exists(BOT_DB):
+                    conn = sqlite3.connect(BOT_DB)
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM bot_config WHERE key = 'my_jid'")
+                    conn.commit()
+                    conn.close()
+                    logger.info("🗑️ JID guardado eliminado")
+
+                # Terminar el programa
+                logger.info("👋 Saliendo...")
+                os._exit(0)
+            except Exception as e:
+                logger.error(f"❌ Error cerrando sesión: {e}")
+                client.send_message(chat, f"{BOT_PREFIX}❌ Error: {e}")
+            return True
+
         elif command == "status":
             try:
                 status_msg = f"{BOT_PREFIX}📊 Status del Bot:\n"
@@ -428,6 +463,7 @@ class WhatsAppBot:
         elif command == "help":
             help_msg = f"{BOT_PREFIX}🤖 Comandos disponibles:\n"
             help_msg += "• BOTSET:reload - Reinicia el bot\n"
+            help_msg += "• BOTSET:logout - Cierra la sesión de WhatsApp\n"
             help_msg += "• BOTSET:status - Muestra el estado del bot\n"
             help_msg += "• BOTSET:help - Muestra esta ayuda\n\n"
             help_msg += "💡 Nota: Los mensajes que comienzan con BOTSYS: son del sistema y se ignoran automáticamente."
