@@ -54,6 +54,7 @@ class WhatsAppBot:
         self._notification_running = False
         self._notification_lock = None  # Lock para thread safety
         self.system_prompt = None  # System prompt personalizado
+        self.agents_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".claude", "agents")
 
         # Inicializar DB del bot
         self._init_bot_db()
@@ -244,6 +245,57 @@ class WhatsAppBot:
             logger.warning(f"⚠️ Error cargando system_prompt.txt: {e}")
             self.system_prompt = None
 
+    def _load_agents(self):
+        """Carga todos los agentes .md de .claude/agents/ y devuelve el JSON para --agents"""
+        try:
+            if not os.path.exists(self.agents_dir):
+                return None
+
+            agents = {}
+            md_files = glob.glob(os.path.join(self.agents_dir, "*.md"))
+
+            for md_file in md_files:
+                try:
+                    with open(md_file, 'r', encoding='utf-8') as f:
+                        content = f.read()
+
+                    # Parsear frontmatter YAML
+                    if content.startswith('---'):
+                        parts = content.split('---', 2)
+                        if len(parts) >= 3:
+                            yaml_content = parts[1]
+                            markdown_content = parts[2].strip()
+
+                            # Parsear YAML simple (extraer name y description)
+                            name = None
+                            description = ""
+                            for line in yaml_content.split('\n'):
+                                if line.startswith('name:'):
+                                    name = line.split(':', 1)[1].strip()
+                                elif line.startswith('description:'):
+                                    description = line.split(':', 1)[1].strip()
+
+                            if name:
+                                agents[name] = {
+                                    "description": description,
+                                    "prompt": markdown_content
+                                }
+                                logger.debug(f"📜 Agente cargado: {name}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Error leyendo {md_file}: {e}")
+
+            if agents:
+                import json
+                agents_json = json.dumps(agents)
+                logger.info(f"📜 {len(agents)} agentes cargados")
+                return agents_json
+            else:
+                return None
+
+        except Exception as e:
+            logger.warning(f"⚠️ Error cargando agentes: {e}")
+            return None
+
     def ask_claude(self, prompt, session_id=None):
         """
         Envía un prompt a Claude usando el CLI y devuelve la respuesta y session_id
@@ -274,6 +326,9 @@ class WhatsAppBot:
             # Recargar system_prompt.txt antes de cada mensaje
             self._load_system_prompt()
 
+            # Cargar agentes
+            agents_json = self._load_agents()
+
             # Construir comando base
             base_cmd = "claude"
 
@@ -282,6 +337,12 @@ class WhatsAppBot:
                 # Escapar comillas dobles en el prompt
                 escaped_prompt = self.system_prompt.replace('"', '\\"')
                 base_cmd += f' --append-system-prompt "{escaped_prompt}"'
+
+            # Agregar --agents si hay agentes definidos
+            if agents_json:
+                # Escapar comillas dobles en el JSON
+                escaped_agents = agents_json.replace('"', '\\"')
+                base_cmd += f' --agents \'{escaped_agents}\''
 
             # Construir comando completo
             if session_id:
