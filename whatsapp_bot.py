@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 # Importar Neonize
 from neonize.client import NewClient
 from neonize.events import ConnectedEv, PairStatusEv, MessageEv, HistorySyncEv
+from neonize.protocol import WATypes
 
 # Configuración
 DB_PATH = os.path.join(CONFIG_DIR, "whatsapp_session.db")
@@ -220,9 +221,6 @@ class WhatsAppBot:
         # Enviar mensaje de confirmación si es un reinicio
         if self._reload_notification_sent and self.my_number:
             try:
-                from neonize.protocol import WATypes
-                from neonize.proto.wa import *
-
                 # Crear JID para enviar mensaje a uno mismo
                 jid = WATypes.NewJID(self.my_number + "@s.whatsapp.net")
                 client.send_message(jid, f"{BOT_PREFIX}✅ Bot reiniciado exitosamente")
