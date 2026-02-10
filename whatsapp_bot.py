@@ -34,13 +34,8 @@ from neonize.events import ConnectedEv, PairStatusEv, MessageEv, HistorySyncEv
 DB_PATH = os.path.join(CONFIG_DIR, "whatsapp_session.db")
 SESSIONS_FILE = os.path.join(CONFIG_DIR, "claude_sessions.json")
 
-# Header para todos los mensajes del bot
-BOT_PREFIX = """
-╔══════════════════════════════════════╗
-║  🤖🤖🤖  BOT DE WHATSAPP  🤖🤖🤖  ║
-╚══════════════════════════════════════╝
-
-"""
+# Header estético para todos los mensajes del bot (una sola línea)
+BOT_PREFIX = "━━━🤖✨ CLAUDE BOT ✨🤖━━━\n\n"
 
 
 class WhatsAppBot:
