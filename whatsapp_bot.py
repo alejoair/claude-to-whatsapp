@@ -438,10 +438,10 @@ class WhatsAppBot:
             # Detener cliente de WhatsApp
             try:
                 if self.client:
-                    self.client.Disconnect()
+                    self.client.Logout()
                     logger.info("✅ Cliente WhatsApp detenido antes de reiniciar")
             except Exception as e:
-                logger.warning(f"⚠️ Error deteniendo cliente: {e}")
+                logger.debug(f"Nota: {e}")
 
             # Reiniciar el script
             os.execv(sys.executable, [sys.executable] + sys.argv)
@@ -613,8 +613,12 @@ class WhatsAppBot:
 
         logger.info("👋 Cerrando sesión...")
         if self.client:
-            self.client.Disconnect()
-            logger.info("✅ Cliente detenido correctamente")
+            try:
+                self.client.Logout()
+                logger.info("✅ Sesión cerrada correctamente")
+            except Exception as e:
+                logger.debug(f"Nota: {e}")
+        logger.info("✅ Programa terminado")
 
 
 if __name__ == "__main__":
