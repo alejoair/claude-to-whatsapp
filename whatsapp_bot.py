@@ -53,6 +53,7 @@ class WhatsAppBot:
         self._notification_thread = None
         self._notification_running = False
         self._notification_lock = None  # Lock para thread safety
+        self.system_prompt = None  # System prompt personalizado
 
         # Inicializar DB del bot
         self._init_bot_db()
@@ -221,6 +222,28 @@ class WhatsAppBot:
         except Exception as e:
             logger.error(f"❌ Error guardando session_id en DB: {e}")
 
+    def _load_system_prompt(self):
+        """Carga el system_prompt.txt del directorio actual si existe"""
+        try:
+            # Buscar en el directorio actual del script
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            prompt_path = os.path.join(script_dir, "system_prompt.txt")
+
+            # También buscar en el directorio de trabajo actual
+            if not os.path.exists(prompt_path):
+                prompt_path = "system_prompt.txt"
+
+            if os.path.exists(prompt_path):
+                with open(prompt_path, 'r', encoding='utf-8') as f:
+                    self.system_prompt = f.read().strip()
+                logger.info(f"📜 System prompt cargado: {len(self.system_prompt)} caracteres")
+            else:
+                logger.info("📜 System prompt: no se encontró system_prompt.txt (opcional)")
+                self.system_prompt = None
+        except Exception as e:
+            logger.warning(f"⚠️ Error cargando system_prompt.txt: {e}")
+            self.system_prompt = None
+
     def ask_claude(self, prompt, session_id=None):
         """
         Envía un prompt a Claude usando el CLI y devuelve la respuesta y session_id
@@ -248,11 +271,23 @@ class WhatsAppBot:
         """Ejecuta el comando de Claude CLI y devuelve (respuesta, session_id)"""
         result = None
         try:
-            # Construir comando para PowerShell
+            # Recargar system_prompt.txt antes de cada mensaje
+            self._load_system_prompt()
+
+            # Construir comando base
+            base_cmd = "claude"
+
+            # Agregar --append-system-prompt si existe un system prompt personalizado
+            if self.system_prompt:
+                # Escapar comillas dobles en el prompt
+                escaped_prompt = self.system_prompt.replace('"', '\\"')
+                base_cmd += f' --append-system-prompt "{escaped_prompt}"'
+
+            # Construir comando completo
             if session_id:
-                ps_script = f'claude -r "{session_id}" "{prompt}" --output-format json --dangerously-skip-permissions'
+                ps_script = f'{base_cmd} -r "{session_id}" "{prompt}" --output-format json --dangerously-skip-permissions'
             else:
-                ps_script = f'claude -p "{prompt}" --output-format json --dangerously-skip-permissions'
+                ps_script = f'{base_cmd} -p "{prompt}" --output-format json --dangerously-skip-permissions'
 
             logger.info(f"🤖 Comando Claude: {ps_script[:100]}...")
             if not session_id:
