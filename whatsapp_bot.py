@@ -340,7 +340,15 @@ class WhatsAppBot:
         try:
             # Obtener información del mensaje
             chat = message.Info.MessageSource.Chat
-            sender_number = str(message.Info.MessageSource.Sender.User)
+            sender = message.Info.MessageSource.Sender
+
+            # Debug: Ver JIDs completos
+            logger.info(f"🔍 DEBUG - Sender JID completo: {sender}")
+            logger.info(f"🔍 DEBUG - Chat JID completo: {chat}")
+            logger.info(f"🔍 DEBUG - Sender.User: {sender.User}")
+            logger.info(f"🔍 DEBUG - Chat.User: {chat.User}")
+
+            sender_number = str(sender.User)
             chat_number = str(chat.User)
 
             # Si my_number no está establecido, intentar obtenerlo del cliente
