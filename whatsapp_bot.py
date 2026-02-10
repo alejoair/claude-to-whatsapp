@@ -32,7 +32,7 @@ from neonize.events import ConnectedEv, PairStatusEv, MessageEv, HistorySyncEv
 
 # Configuración
 DB_PATH = os.path.join(CONFIG_DIR, "whatsapp_session.db")
-SESSIONS_FILE = os.path.join(CONFIG_DIR, "claude_sessions.json")
+# SESSIONS_FILE eliminado - session_id ahora se guarda en DB SQLite
 BOT_DB = os.path.join(CONFIG_DIR, "bot_data.db")  # DB adicional para datos del bot
 
 # Header estético para todos los mensajes del bot (una sola línea)
@@ -190,23 +190,33 @@ class WhatsAppBot:
             logger.error(f"❌ Error cargando número: {e}")
         return None
 
-    def load_sessions(self):
-        """Carga los session IDs de Claude desde archivo"""
-        if os.path.exists(SESSIONS_FILE):
-            try:
-                with open(SESSIONS_FILE, 'r') as f:
-                    return json.load(f)
-            except:
-                return {}
-        return {}
-
-    def save_sessions(self, sessions):
-        """Guarda los session IDs de Claude en archivo"""
+    def load_session_id(self):
+        """Carga el session ID de Claude desde la base de datos"""
         try:
-            with open(SESSIONS_FILE, 'w') as f:
-                json.dump(sessions, f, indent=2)
+            conn = sqlite3.connect(BOT_DB)
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM bot_config WHERE key = 'claude_session_id'")
+            row = cursor.fetchone()
+            conn.close()
+            return row[0] if row else None
         except Exception as e:
-            logger.error(f"Error guardando sesiones: {e}")
+            logger.error(f"❌ Error cargando session_id de DB: {e}")
+            return None
+
+    def save_session_id(self, session_id):
+        """Guarda el session ID de Claude en la base de datos"""
+        try:
+            conn = sqlite3.connect(BOT_DB)
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO bot_config (key, value)
+                VALUES ('claude_session_id', ?)
+            """, (session_id,))
+            conn.commit()
+            conn.close()
+            logger.info(f"💾 Session ID guardado en DB: {session_id[:20]}...")
+        except Exception as e:
+            logger.error(f"❌ Error guardando session_id en DB: {e}")
 
     def ask_claude(self, prompt, session_id=None):
         """
@@ -314,10 +324,7 @@ class WhatsAppBot:
 
                 # Guardar session_id si cambió
                 if new_session_id and new_session_id != session_id:
-                    sessions = self.load_sessions()
-                    sessions[chat_key] = new_session_id
-                    self.save_sessions(sessions)
-                    logger.info(f"💾 Session ID guardada para chat: {chat_key}")
+                    self.save_session_id(new_session_id)
 
                 # Mostrar respuesta de Claude
                 logger.info(f"🤖 Claude: {response[:200]}...")
@@ -443,13 +450,11 @@ class WhatsAppBot:
             if self.process_bot_command(text, chat, client):
                 return  # Si fue un comando, no procesar con Claude
 
-            # Obtener o crear session_id para este chat
-            chat_key = str(chat)
-            sessions = self.load_sessions()
-            session_id = sessions.get(chat_key)
+            # Obtener session_id de Claude (compartido para todos los mensajes)
+            session_id = self.load_session_id()
 
             # Enviar a Claude de forma asíncrona (no bloquea el bot)
-            self.ask_claude_async(chat, client, text, session_id, chat_key)
+            self.ask_claude_async(chat, client, text, session_id, str(chat))
 
         except AttributeError:
             pass
@@ -556,9 +561,10 @@ class WhatsAppBot:
 
         elif command == "status":
             try:
+                session_id = self.load_session_id()
                 status_msg = f"{BOT_PREFIX}📊 Status del Bot:\n"
                 status_msg += f"• Número: {self.my_number}\n"
-                status_msg += f"• Sesiones: {len(self.load_sessions())}\n"
+                status_msg += f"• Session ID: {'✅ Activa' if session_id else '❌ No existe'}\n"
                 status_msg += f"• DB Path: {DB_PATH}\n"
                 status_msg += f"• Python: {sys.version.split()[0]}"
                 client.send_message(chat, status_msg)
@@ -631,7 +637,6 @@ class WhatsAppBot:
         logger.info("🐍 WhatsApp Bot + Claude CLI")
         logger.info("=" * 50)
         logger.info(f"📂 Base de datos: {DB_PATH}")
-        logger.info(f"📂 Sesiones Claude: {SESSIONS_FILE}")
 
         if os.path.exists(DB_PATH):
             logger.info("💾 Sesión WhatsApp guardada. Reconectando...")
