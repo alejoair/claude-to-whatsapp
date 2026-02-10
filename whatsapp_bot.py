@@ -9,6 +9,7 @@ import json
 import sqlite3
 import signal
 import atexit
+import time
 
 # Crear directorio de configuración
 CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".claude-to-whatsapp")
@@ -40,6 +41,57 @@ class WhatsAppBot:
     def __init__(self):
         self.client = None
         self.my_number = None
+        self.pending_requests = {}  # chat_key -> {'start_time': timestamp, 'prompt': str, 'chat': chat_obj}
+        self._notification_thread = None
+        self._notification_running = False
+        self._notification_lock = None  # Lock para thread safety
+
+    def _start_notification_thread(self):
+        """Inicia el thread de notificaciones periódicas"""
+        if self._notification_running:
+            return
+
+        import threading
+        self._notification_lock = threading.Lock()
+        self._notification_running = True
+
+        def notification_loop():
+            while self._notification_running:
+                try:
+                    time.sleep(30)  # Verificar cada 30 segundos
+                    if not self._notification_running:
+                        break
+
+                    current_time = time.time()
+                    with self._notification_lock:
+                        expired_keys = []
+                        for chat_key, req_data in self.pending_requests.items():
+                            elapsed = int(current_time - req_data['start_time'])
+                            if elapsed >= 30:  # Enviar notificación cada 30s
+                                minutes = elapsed // 60
+                                seconds = elapsed % 60
+
+                                if minutes > 0:
+                                    time_msg = f"BOTSYS:⏳ Tiempo transcurrido: {minutes}m {seconds}s"
+                                else:
+                                    time_msg = f"BOTSYS:⏳ Tiempo transcurrido: {seconds}s"
+
+                                try:
+                                    self.client.send_message(req_data['chat'], time_msg)
+                                    logger.info(f"📤 Notificación de tiempo enviada a {chat_key}: {time_msg}")
+                                except Exception as e:
+                                    logger.error(f"❌ Error enviando notificación: {e}")
+
+                except Exception as e:
+                    logger.error(f"❌ Error en thread de notificaciones: {e}")
+
+        self._notification_thread = threading.Thread(target=notification_loop, daemon=True)
+        self._notification_thread.start()
+        logger.info("✅ Thread de notificaciones iniciado")
+
+    def _stop_notification_thread(self):
+        """Detiene el thread de notificaciones"""
+        self._notification_running = False
 
     def load_sessions(self):
         """Carga los session IDs de Claude desde archivo"""
@@ -104,9 +156,17 @@ class WhatsAppBot:
     def ask_claude_async(self, chat, client, prompt, session_id, chat_key):
         """
         Ejecuta ask_claude en un thread separado y envía la respuesta.
-        También envía un mensaje de estado antes de procesar.
+        También envía mensajes de estado periódicos cada 30 segundos.
         """
         import threading
+
+        # Registrar la solicitud como pendiente
+        self.pending_requests[chat_key] = {
+            'start_time': time.time(),
+            'prompt': prompt,
+            'chat': chat,
+            'client': client
+        }
 
         def _process():
             try:
@@ -130,6 +190,11 @@ class WhatsAppBot:
                     logger.error(f"❌ Error enviando a WhatsApp: {e}")
             except Exception as e:
                 logger.error(f"❌ Error en thread de Claude: {e}")
+            finally:
+                # Limpiar solicitud pendiente (siempre ejecutar, incluso si hay error)
+                if chat_key in self.pending_requests:
+                    del self.pending_requests[chat_key]
+                    logger.info(f"✅ Solicitud completada y eliminada para {chat_key}")
 
         # Enviar mensaje de estado (con prefijo BOTSYS: para evitar loop)
         try:
@@ -354,6 +419,9 @@ class WhatsAppBot:
         # Esperar un momento para que se conecte
         import time
         time.sleep(2)
+
+        # Iniciar thread de notificaciones periódicas
+        self._start_notification_thread()
 
         logger.info("\n✅ Bot activo. Presiona Ctrl+C para detener...")
         logger.info("📨 Esperando mensajes...")
