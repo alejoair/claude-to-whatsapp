@@ -438,8 +438,8 @@ class WhatsAppBot:
             # Detener cliente de WhatsApp
             try:
                 if self.client:
-                    self.client.Logout()
-                    logger.info("✅ Cliente WhatsApp detenido antes de reiniciar")
+                    self.client.disconnect()
+                    logger.info("✅ Cliente WhatsApp desconectado antes de reiniciar")
             except Exception as e:
                 logger.debug(f"Nota: {e}")
 
@@ -457,7 +457,7 @@ class WhatsAppBot:
 
                 # Detener y desconectar cliente
                 if self.client:
-                    self.client.Logout()
+                    self.client.logout()
                     logger.info("✅ Sesión de WhatsApp cerrada")
 
                 # Eliminar archivo de sesión para forzar nuevo pairing
@@ -614,8 +614,8 @@ class WhatsAppBot:
         logger.info("👋 Cerrando sesión...")
         if self.client:
             try:
-                self.client.Logout()
-                logger.info("✅ Sesión cerrada correctamente")
+                self.client.disconnect()
+                logger.info("✅ Cliente desconectado correctamente")
             except Exception as e:
                 logger.debug(f"Nota: {e}")
         logger.info("✅ Programa terminado")
