@@ -33,7 +33,14 @@ from neonize.events import ConnectedEv, PairStatusEv, MessageEv, HistorySyncEv
 # Configuración
 DB_PATH = os.path.join(CONFIG_DIR, "whatsapp_session.db")
 SESSIONS_FILE = os.path.join(CONFIG_DIR, "claude_sessions.json")
-BOT_PREFIX = "🤖🤖🤖 "  # Prefijo para todos los mensajes del bot
+
+# Header para todos los mensajes del bot
+BOT_PREFIX = """
+╔══════════════════════════════════════╗
+║  🤖🤖🤖  BOT DE WHATSAPP  🤖🤖🤖  ║
+╚══════════════════════════════════════╝
+
+"""
 
 
 class WhatsAppBot:
