@@ -54,6 +54,15 @@ class WhatsAppBot:
         self._notification_running = False
         self._notification_lock = None  # Lock para thread safety
 
+        # Verificar si es un reinicio para enviar notificación
+        reload_flag = os.path.join(CONFIG_DIR, ".reload_flag")
+        self._reload_notification_sent = os.path.exists(reload_flag)
+        if self._reload_notification_sent:
+            try:
+                os.remove(reload_flag)
+            except:
+                pass
+
     def _start_notification_thread(self):
         """Inicia el thread de notificaciones periódicas"""
         if self._notification_running:
@@ -213,6 +222,20 @@ class WhatsAppBot:
         """Evento cuando se conecta a WhatsApp"""
         logger.info("⚡ ¡Conectado a WhatsApp!")
 
+        # Enviar mensaje de confirmación si es un reinicio
+        if self._reload_notification_sent and self.my_number:
+            try:
+                from neonize.protocol import WATypes
+                from neonize.proto.wa import *
+
+                # Crear JID para enviar mensaje a uno mismo
+                jid = WATypes.NewJID(self.my_number + "@s.whatsapp.net")
+                client.send_message(jid, f"{BOT_PREFIX}✅ Bot reiniciado exitosamente")
+                logger.info("📤 Mensaje de reinicio enviado")
+            except Exception as e:
+                logger.warning(f"⚠️ No se pudo enviar mensaje de reinicio: {e}")
+            self._reload_notification_sent = False
+
     def on_pair_status(self, _: NewClient, message: PairStatusEv):
         """Evento cuando se completa el emparejamiento"""
         self.my_number = str(message.ID.User)
@@ -308,6 +331,17 @@ class WhatsAppBot:
             logger.info("🔄 Comando de reinicio recibido. Reiniciando bot...")
             try:
                 client.send_message(chat, f"{BOT_PREFIX}🔄 Reiniciando bot...")
+            except:
+                pass
+
+            # Marcar que se debe enviar notificación al reconectar
+            self._reload_notification_sent = True
+
+            # Guardar marca de reinicio en archivo
+            try:
+                reload_flag = os.path.join(CONFIG_DIR, ".reload_flag")
+                with open(reload_flag, 'w') as f:
+                    f.write("reloading")
             except:
                 pass
 
