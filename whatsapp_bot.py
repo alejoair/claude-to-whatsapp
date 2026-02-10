@@ -35,8 +35,11 @@ DB_PATH = os.path.join(CONFIG_DIR, "whatsapp_session.db")
 # SESSIONS_FILE eliminado - session_id ahora se guarda en DB SQLite
 BOT_DB = os.path.join(CONFIG_DIR, "bot_data.db")  # DB adicional para datos del bot
 
-# Header estético para todos los mensajes del bot (una sola línea)
-BOT_PREFIX = "━━━🤖✨ CLAUDE BOT ✨🤖━━━\n\n"
+# Header estético para respuestas de Claude (estilo hacker)
+BOT_PREFIX = "╔════════════════════════════════════════╗\n║ 🕵️‍♂️🔓 CLAUDE_ROOT@SYSTEM:~# ║\n╚════════════════════════════════════════╝\n\n"
+
+# Header minimal para mensajes del sistema (BOTSYS, BOTSET)
+SYS_PREFIX = "⚙️ "
 
 
 class WhatsAppBot:
@@ -93,9 +96,9 @@ class WhatsAppBot:
                                 seconds = elapsed % 60
 
                                 if minutes > 0:
-                                    time_msg = f"{BOT_PREFIX}BOTSYS:⏳ Tiempo transcurrido: {minutes}m {seconds}s"
+                                    time_msg = f"{SYS_PREFIX}BOTSYS:⏳ Tiempo transcurrido: {minutes}m {seconds}s"
                                 else:
-                                    time_msg = f"{BOT_PREFIX}BOTSYS:⏳ Tiempo transcurrido: {seconds}s"
+                                    time_msg = f"{SYS_PREFIX}BOTSYS:⏳ Tiempo transcurrido: {seconds}s"
 
                                 try:
                                     req_data['client'].send_message(req_data['chat'], time_msg)
@@ -352,13 +355,17 @@ class WhatsAppBot:
         """Evento cuando se conecta a WhatsApp"""
         logger.info("⚡ ¡Conectado a WhatsApp!")
 
-        # Enviar mensaje de confirmación si es un reinicio y tenemos el JID
-        if self._reload_notification_sent and self.my_jid:
+        # Enviar mensaje de confirmación si es un reinicio y tenemos el número
+        if self._reload_notification_sent and self.my_number:
             try:
-                # Crear JID desde el string guardado
-                from neonize.proto.wa import JID
+                # Crear JID usando el número guardado
+                from neonize.proto.Neonize_pb2 import JID
                 jid_obj = JID()
-                jid_obj.ParseFromString(bytes.fromhex(self.my_jid.split('@')[0]))
+                jid_obj.User = self.my_number
+                jid_obj.RawAgent = 0
+                jid_obj.Device = 0
+                jid_obj.Integrator = 0
+                jid_obj.Server = "s.whatsapp.net"
 
                 client.send_message(jid_obj, f"{BOT_PREFIX}✅ Bot reiniciado exitosamente")
                 logger.info("📤 Mensaje de reinicio enviado")
@@ -486,9 +493,43 @@ class WhatsAppBot:
             except Exception as e:
                 logger.debug(f"Nota: {e}")
 
-            # Reiniciar el script
-            os.execv(sys.executable, [sys.executable] + sys.argv)
-            return True
+            # Reiniciar el script usando un batch file wrapper
+            try:
+                # Pausa breve para asegurar que el mensaje se envíe
+                time.sleep(0.5)
+
+                # Crear un script temporal de batch que reinicie el bot
+                script_path = os.path.join(CONFIG_DIR, "reload_bot.bat")
+
+                # Obtener la ruta completa del script Python
+                script_full_path = os.path.abspath(sys.argv[0])
+
+                # Crear batch script que ejecuta el bot
+                with open(script_path, 'w') as f:
+                    # Esperar 2 segundos y luego iniciar el nuevo proceso
+                    f.write(f'@echo off\n')
+                    f.write(f'timeout /t 2 /nobreak > nul\n')
+                    f.write(f'cd /d "{os.getcwd()}"\n')
+                    f.write(f'"{sys.executable}" "{script_full_path}"\n')
+                    f.write(f'del "{script_path}"\n')  # Auto-eliminarse
+
+                logger.info(f"📝 Script de reinicio creado: {script_path}")
+
+                # Iniciar el batch script en nueva ventana
+                import subprocess
+                subprocess.Popen(['cmd', '/c', script_path],
+                               creationflags=subprocess.CREATE_NEW_CONSOLE)
+
+                logger.info("✅ Proceso de reinicio iniciado. Saliendo...")
+
+                # Salir del proceso actual
+                time.sleep(0.5)
+                os._exit(0)
+            except Exception as e:
+                logger.error(f"❌ Error reiniciando: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+                return True
 
         elif command == "logout":
             logger.info("🚪 Comando de cierre de sesión recibido...")
@@ -513,7 +554,6 @@ class WhatsAppBot:
                         logger.warning(f"⚠️ Error en disconnect: {e}")
 
                 # Pequeña pausa para asegurar que se liberen los recursos
-                import time
                 time.sleep(0.5)
 
                 # Eliminar archivo de sesión para forzar nuevo pairing
@@ -539,24 +579,24 @@ class WhatsAppBot:
                 os._exit(0)
             except Exception as e:
                 logger.error(f"❌ Error cerrando sesión: {e}")
-                client.send_message(chat, f"{BOT_PREFIX}❌ Error: {e}")
+                client.send_message(chat, f"{SYS_PREFIX}❌ Error: {e}")
             return True
 
         elif command == "status":
             try:
                 session_id = self.load_session_id()
-                status_msg = f"{BOT_PREFIX}📊 Status del Bot:\n"
+                status_msg = f"{SYS_PREFIX}📊 Status del Bot:\n"
                 status_msg += f"• Número: {self.my_number}\n"
                 status_msg += f"• Session ID: {'✅ Activa' if session_id else '❌ No existe'}\n"
                 status_msg += f"• DB Path: {DB_PATH}\n"
                 status_msg += f"• Python: {sys.version.split()[0]}"
                 client.send_message(chat, status_msg)
             except Exception as e:
-                client.send_message(chat, f"{BOT_PREFIX}❌ Error obteniendo status: {e}")
+                client.send_message(chat, f"{SYS_PREFIX}❌ Error obteniendo status: {e}")
             return True
 
         elif command == "help":
-            help_msg = f"{BOT_PREFIX}🤖 Comandos disponibles:\n"
+            help_msg = f"{SYS_PREFIX}🤖 Comandos disponibles:\n"
             help_msg += "• BOTSET:reload - Reinicia el bot\n"
             help_msg += "• BOTSET:logout - Cierra la sesión de WhatsApp\n"
             help_msg += "• BOTSET:status - Muestra el estado del bot\n"
@@ -570,7 +610,7 @@ class WhatsAppBot:
 
         else:
             try:
-                client.send_message(chat, f"{BOT_PREFIX}❌ Comando desconocido: {command}\nUsa BOTSET:help para ver comandos disponibles.")
+                client.send_message(chat, f"{SYS_PREFIX}❌ Comando desconocido: {command}\nUsa BOTSET:help para ver comandos disponibles.")
             except:
                 pass
             return True
