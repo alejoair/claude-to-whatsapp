@@ -77,7 +77,7 @@ class WhatsAppBot:
                 ["powershell", "-Command", ps_script],
                 capture_output=True,
                 text=True,
-                timeout=120,
+                timeout=300,  # Aumentado a 5 minutos
                 encoding='utf-8'
             )
 
@@ -100,6 +100,46 @@ class WhatsAppBot:
         except Exception as e:
             logger.error(f"❌ Error comunicando con Claude: {e}")
             return "Hubo un error al comunicarme con Claude.", session_id
+
+    def ask_claude_async(self, chat, client, prompt, session_id, chat_key):
+        """
+        Ejecuta ask_claude en un thread separado y envía la respuesta.
+        También envía un mensaje de estado antes de procesar.
+        """
+        import threading
+
+        def _process():
+            try:
+                response, new_session_id = self.ask_claude(prompt, session_id)
+
+                # Guardar session_id si cambió
+                if new_session_id and new_session_id != session_id:
+                    sessions = self.load_sessions()
+                    sessions[chat_key] = new_session_id
+                    self.save_sessions(sessions)
+                    logger.info(f"💾 Session ID guardada para chat: {chat_key}")
+
+                # Mostrar respuesta de Claude
+                logger.info(f"🤖 Claude: {response[:200]}...")
+
+                # Enviar respuesta a WhatsApp (con prefijo BOTSYS: para evitar loop)
+                try:
+                    client.send_message(chat, response)
+                    logger.info(f"📤 Respuesta enviada a WhatsApp")
+                except Exception as e:
+                    logger.error(f"❌ Error enviando a WhatsApp: {e}")
+            except Exception as e:
+                logger.error(f"❌ Error en thread de Claude: {e}")
+
+        # Enviar mensaje de estado (con prefijo BOTSYS: para evitar loop)
+        try:
+            client.send_message(chat, "BOTSYS:⏳ Pensando...")
+        except:
+            pass
+
+        # Iniciar thread
+        thread = threading.Thread(target=_process, daemon=True)
+        thread.start()
 
     def on_connected(self, client: NewClient, _: ConnectedEv):
         """Evento cuando se conecta a WhatsApp"""
@@ -158,6 +198,11 @@ class WhatsAppBot:
 
             text = text.strip()
 
+            # Ignorar mensajes del sistema (evita bucles infinitos)
+            if text.startswith("BOTSYS:"):
+                logger.info(f"🔇 Mensaje del sistema ignorado: {text[:50]}...")
+                return
+
             # Mostrar información del mensaje
             logger.info(f"📩 Self-message: {sender_number} → {chat_number}")
             logger.info(f"💬 Texto: {text}")
@@ -171,24 +216,8 @@ class WhatsAppBot:
             sessions = self.load_sessions()
             session_id = sessions.get(chat_key)
 
-            # Enviar a Claude
-            response, new_session_id = self.ask_claude(text, session_id)
-
-            # Guardar session_id si cambió
-            if new_session_id and new_session_id != session_id:
-                sessions[chat_key] = new_session_id
-                self.save_sessions(sessions)
-                logger.info(f"💾 Session ID guardada para chat: {chat_key}")
-
-            # Mostrar respuesta de Claude
-            logger.info(f"🤖 Claude: {response[:200]}...")
-
-            # Enviar respuesta a WhatsApp
-            try:
-                client.send_message(chat, response)
-                logger.info(f"📤 Respuesta enviada a WhatsApp")
-            except Exception as e:
-                logger.error(f"❌ Error enviando a WhatsApp: {e}")
+            # Enviar a Claude de forma asíncrona (no bloquea el bot)
+            self.ask_claude_async(chat, client, text, session_id, chat_key)
 
         except AttributeError:
             pass
@@ -233,7 +262,8 @@ class WhatsAppBot:
             help_msg = "🤖 Comandos disponibles:\n"
             help_msg += "• BOTSET:reload - Reinicia el bot\n"
             help_msg += "• BOTSET:status - Muestra el estado del bot\n"
-            help_msg += "• BOTSET:help - Muestra esta ayuda"
+            help_msg += "• BOTSET:help - Muestra esta ayuda\n\n"
+            help_msg += "💡 Nota: Los mensajes que comienzan con BOTSYS: son del sistema y se ignoran automáticamente."
             try:
                 client.send_message(chat, help_msg)
             except Exception as e:
