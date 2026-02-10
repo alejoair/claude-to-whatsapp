@@ -392,33 +392,17 @@ class WhatsAppBot:
             chat = message.Info.MessageSource.Chat
             sender = message.Info.MessageSource.Sender
 
-            # Debug: Ver JIDs completos
-            logger.info(f"🔍 DEBUG - Sender JID completo: {sender}")
-            logger.info(f"🔍 DEBUG - Chat JID completo: {chat}")
-            logger.info(f"🔍 DEBUG - Sender.User: {sender.User}")
-            logger.info(f"🔍 DEBUG - Chat.User: {chat.User}")
+            # Extraer el campo IsFromMe del MessageSource
+            msg_source = message.Info.MessageSource
+            is_from_me = msg_source.IsFromMe
 
-            sender_number = str(sender.User)
-            chat_number = str(chat.User)
+            logger.info(f"🔍 Filtro: IsFromMe={is_from_me}")
 
-            # Si my_number no está establecido, intentar obtenerlo del cliente
-            if not self.my_number:
-                logger.warning(f"⚠️ MY_NUMBER no está establecido. Intentando obtenerlo...")
-                self._try_get_number_from_message(message)
-                if not self.my_number:
-                    logger.warning(f"⚠️ No se pudo determinar MY_NUMBER. Ignorando mensaje.")
-                    return
-
-            # Verificar que sea un self-message (sender y chat deben ser iguales)
-            # Esto funciona independientemente del servidor (s.whatsapp.net, lid, etc.)
-            logger.info(f"🔍 Filtro: sender={sender_number}, chat={chat_number}, sender==chat: {sender_number == chat_number}")
-
-            # Para self-messages, sender y chat SIEMPRE deben ser iguales
-            if sender_number != chat_number:
-                logger.info(f"❌ Mensaje filtrado: No es un self-message (sender != chat)")
+            if not is_from_me:
+                logger.info(f"❌ Mensaje filtrado: No es un self-message (IsFromMe=False)")
                 return
 
-            logger.info(f"✅ Mensaje aceptado: Es un self-message")
+            logger.info(f"✅ Mensaje aceptado: Es un self-message (IsFromMe=True)")
 
             # Obtener texto del mensaje
             msg = message.Message
@@ -443,7 +427,6 @@ class WhatsAppBot:
                 return
 
             # Mostrar información del mensaje
-            logger.info(f"📩 Self-message: {sender_number} → {chat_number}")
             logger.info(f"💬 Texto: {text}")
 
             # Procesar comandos del bot primero
