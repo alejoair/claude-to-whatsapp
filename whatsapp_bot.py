@@ -307,6 +307,19 @@ class WhatsAppBot:
                 client.send_message(chat, "🔄 Reiniciando bot...")
             except:
                 pass
+
+            # Detener notification thread
+            self._stop_notification_thread()
+            logger.info("🛑 Thread de notificaciones detenido")
+
+            # Detener cliente de WhatsApp
+            try:
+                if self.client:
+                    self.client.stop()
+                    logger.info("✅ Cliente WhatsApp detenido antes de reiniciar")
+            except Exception as e:
+                logger.warning(f"⚠️ Error deteniendo cliente: {e}")
+
             # Reiniciar el script
             os.execv(sys.executable, [sys.executable] + sys.argv)
             return True
