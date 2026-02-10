@@ -132,8 +132,8 @@ class WhatsAppBot:
                     logger.warning(f"⚠️ No se pudo determinar MY_NUMBER. Ignorando mensaje.")
                     return
 
-            # Verificar que sea un self-message
-            if self.my_number != sender_number and self.my_number != chat_number:
+            # Verificar que sea un self-message (sender y chat deben ser tu número)
+            if self.my_number != sender_number or self.my_number != chat_number:
                 return
 
             # Obtener texto del mensaje
