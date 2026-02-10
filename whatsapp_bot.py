@@ -438,7 +438,7 @@ class WhatsAppBot:
             # Detener cliente de WhatsApp
             try:
                 if self.client:
-                    self.client.stop()
+                    self.client.Disconnect()
                     logger.info("✅ Cliente WhatsApp detenido antes de reiniciar")
             except Exception as e:
                 logger.warning(f"⚠️ Error deteniendo cliente: {e}")
@@ -613,7 +613,7 @@ class WhatsAppBot:
 
         logger.info("👋 Cerrando sesión...")
         if self.client:
-            self.client.stop()
+            self.client.Disconnect()
             logger.info("✅ Cliente detenido correctamente")
 
 
