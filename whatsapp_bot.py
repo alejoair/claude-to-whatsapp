@@ -183,9 +183,9 @@ class WhatsAppBot:
                 # Mostrar respuesta de Claude
                 logger.info(f"🤖 Claude: {response[:200]}...")
 
-                # Enviar respuesta a WhatsApp (con prefijo BOTSYS: para evitar loop)
+                # Enviar respuesta a WhatsApp con prefijo del bot
                 try:
-                    client.send_message(chat, response)
+                    client.send_message(chat, f"{BOT_PREFIX}{response}")
                     logger.info(f"📤 Respuesta enviada a WhatsApp")
                 except Exception as e:
                     logger.error(f"❌ Error enviando a WhatsApp: {e}")
