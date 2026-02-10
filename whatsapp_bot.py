@@ -455,15 +455,32 @@ class WhatsAppBot:
                 # Detener notification thread
                 self._stop_notification_thread()
 
-                # Detener y desconectar cliente
+                # Primero hacer logout, luego disconnect para liberar el archivo
                 if self.client:
-                    self.client.logout()
-                    logger.info("✅ Sesión de WhatsApp cerrada")
+                    try:
+                        self.client.logout()
+                        logger.info("✅ Sesión de WhatsApp cerrada")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error en logout: {e}")
+
+                    try:
+                        self.client.disconnect()
+                        logger.info("✅ Cliente desconectado")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error en disconnect: {e}")
+
+                # Pequeña pausa para asegurar que se liberen los recursos
+                import time
+                time.sleep(0.5)
 
                 # Eliminar archivo de sesión para forzar nuevo pairing
                 if os.path.exists(DB_PATH):
-                    os.remove(DB_PATH)
-                    logger.info("🗑️ Archivo de sesión eliminado")
+                    try:
+                        os.remove(DB_PATH)
+                        logger.info("🗑️ Archivo de sesión eliminado")
+                    except PermissionError as e:
+                        logger.error(f"❌ No se pudo eliminar {DB_PATH}: {e}")
+                        logger.warning("⚠️ Es posible que el archivo esté siendo usado por otro proceso")
 
                 # Eliminar también datos guardados
                 if os.path.exists(BOT_DB):
