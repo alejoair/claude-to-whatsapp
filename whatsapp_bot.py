@@ -7,6 +7,8 @@ import sys
 import subprocess
 import json
 import sqlite3
+import signal
+import atexit
 
 # Crear directorio de configuración
 CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".claude-to-whatsapp")
@@ -133,8 +135,11 @@ class WhatsAppBot:
                     return
 
             # Verificar que sea un self-message (sender y chat deben ser tu número)
+            logger.info(f"🔍 Filtro: my_number={self.my_number}, sender={sender_number}, chat={chat_number}")
             if self.my_number != sender_number or self.my_number != chat_number:
+                logger.info(f"❌ Mensaje filtrado: No es un self-message")
                 return
+            logger.info(f"✅ Mensaje aceptado: Es un self-message")
 
             # Obtener texto del mensaje
             msg = message.Message
@@ -156,6 +161,10 @@ class WhatsAppBot:
             # Mostrar información del mensaje
             logger.info(f"📩 Self-message: {sender_number} → {chat_number}")
             logger.info(f"💬 Texto: {text}")
+
+            # Procesar comandos del bot primero
+            if self.process_bot_command(text, chat, client):
+                return  # Si fue un comando, no procesar con Claude
 
             # Obtener o crear session_id para este chat
             chat_key = str(chat)
@@ -185,6 +194,58 @@ class WhatsAppBot:
             pass
         except Exception as e:
             logger.error(f"Error procesando mensaje: {e}")
+
+    def process_bot_command(self, text: str, chat, client) -> bool:
+        """
+        Procesa comandos especiales del bot.
+        Retorna True si el mensaje fue un comando y fue procesado.
+        """
+        if not text.startswith("BOTSET:"):
+            return False
+
+        command = text[7:].strip().lower()  # Remover "BOTSET:" y obtener comando
+
+        logger.info(f"🔧 Comando recibido: {command}")
+
+        if command == "reload":
+            logger.info("🔄 Comando de reinicio recibido. Reiniciando bot...")
+            try:
+                client.send_message(chat, "🔄 Reiniciando bot...")
+            except:
+                pass
+            # Reiniciar el script
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+            return True
+
+        elif command == "status":
+            try:
+                status_msg = f"📊 Status del Bot:\n"
+                status_msg += f"• Número: {self.my_number}\n"
+                status_msg += f"• Sesiones: {len(self.load_sessions())}\n"
+                status_msg += f"• DB Path: {DB_PATH}\n"
+                status_msg += f"• Python: {sys.version.split()[0]}"
+                client.send_message(chat, status_msg)
+            except Exception as e:
+                client.send_message(chat, f"❌ Error obteniendo status: {e}")
+            return True
+
+        elif command == "help":
+            help_msg = "🤖 Comandos disponibles:\n"
+            help_msg += "• BOTSET:reload - Reinicia el bot\n"
+            help_msg += "• BOTSET:status - Muestra el estado del bot\n"
+            help_msg += "• BOTSET:help - Muestra esta ayuda"
+            try:
+                client.send_message(chat, help_msg)
+            except Exception as e:
+                logger.error(f"❌ Error enviando ayuda: {e}")
+            return True
+
+        else:
+            try:
+                client.send_message(chat, f"❌ Comando desconocido: {command}\nUsa BOTSET:help para ver comandos disponibles.")
+            except:
+                pass
+            return True
 
     def _try_get_number_from_message(self, message: MessageEv):
         """Intenta deducir my_number del primer mensaje recibido"""
