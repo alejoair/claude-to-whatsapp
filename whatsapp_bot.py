@@ -359,11 +359,15 @@ class WhatsAppBot:
                     logger.warning(f"⚠️ No se pudo determinar MY_NUMBER. Ignorando mensaje.")
                     return
 
-            # Verificar que sea un self-message (sender y chat deben ser tu número)
-            logger.info(f"🔍 Filtro: my_number={self.my_number}, sender={sender_number}, chat={chat_number}")
-            if self.my_number != sender_number or self.my_number != chat_number:
-                logger.info(f"❌ Mensaje filtrado: No es un self-message")
+            # Verificar que sea un self-message (sender y chat deben ser iguales)
+            # Esto funciona independientemente del servidor (s.whatsapp.net, lid, etc.)
+            logger.info(f"🔍 Filtro: sender={sender_number}, chat={chat_number}, sender==chat: {sender_number == chat_number}")
+
+            # Para self-messages, sender y chat SIEMPRE deben ser iguales
+            if sender_number != chat_number:
+                logger.info(f"❌ Mensaje filtrado: No es un self-message (sender != chat)")
                 return
+
             logger.info(f"✅ Mensaje aceptado: Es un self-message")
 
             # Obtener texto del mensaje
