@@ -29,11 +29,11 @@ logger = logging.getLogger(__name__)
 # Importar Neonize
 from neonize.client import NewClient
 from neonize.events import ConnectedEv, PairStatusEv, MessageEv, HistorySyncEv
-from neonize.protocol import WATypes
 
 # Configuración
 DB_PATH = os.path.join(CONFIG_DIR, "whatsapp_session.db")
 SESSIONS_FILE = os.path.join(CONFIG_DIR, "claude_sessions.json")
+BOT_DB = os.path.join(CONFIG_DIR, "bot_data.db")  # DB adicional para datos del bot
 
 # Header estético para todos los mensajes del bot (una sola línea)
 BOT_PREFIX = "━━━🤖✨ CLAUDE BOT ✨🤖━━━\n\n"
@@ -45,10 +45,14 @@ class WhatsAppBot:
     def __init__(self):
         self.client = None
         self.my_number = None
+        self.my_jid = None  # JID completo para enviar mensajes a uno mismo
         self.pending_requests = {}  # chat_key -> {'start_time': timestamp, 'prompt': str, 'chat': chat_obj}
         self._notification_thread = None
         self._notification_running = False
         self._notification_lock = None  # Lock para thread safety
+
+        # Inicializar DB del bot
+        self._init_bot_db()
 
         # Verificar si es un reinicio para enviar notificación
         reload_flag = os.path.join(CONFIG_DIR, ".reload_flag")
@@ -58,6 +62,9 @@ class WhatsAppBot:
                 os.remove(reload_flag)
             except:
                 pass
+
+        # Cargar JID guardado si existe
+        self.my_jid = self._load_my_jid()
 
     def _start_notification_thread(self):
         """Inicia el thread de notificaciones periódicas"""
@@ -105,6 +112,52 @@ class WhatsAppBot:
     def _stop_notification_thread(self):
         """Detiene el thread de notificaciones"""
         self._notification_running = False
+
+    def _init_bot_db(self):
+        """Inicializa la base de datos del bot"""
+        try:
+            conn = sqlite3.connect(BOT_DB)
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS bot_config (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            """)
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"❌ Error inicializando DB del bot: {e}")
+
+    def _save_my_jid(self, jid):
+        """Guarda el JID del propio usuario"""
+        try:
+            conn = sqlite3.connect(BOT_DB)
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO bot_config (key, value)
+                VALUES ('my_jid', ?)
+            """, (str(jid),))
+            conn.commit()
+            conn.close()
+            logger.info(f"💾 JID guardado: {jid}")
+        except Exception as e:
+            logger.error(f"❌ Error guardando JID: {e}")
+
+    def _load_my_jid(self):
+        """Carga el JID del propio usuario"""
+        try:
+            conn = sqlite3.connect(BOT_DB)
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM bot_config WHERE key = 'my_jid'")
+            result = cursor.fetchone()
+            conn.close()
+            if result:
+                logger.info(f"📱 JID cargado: {result[0]}")
+                return result[0]
+        except Exception as e:
+            logger.error(f"❌ Error cargando JID: {e}")
+        return None
 
     def load_sessions(self):
         """Carga los session IDs de Claude desde archivo"""
@@ -218,12 +271,15 @@ class WhatsAppBot:
         """Evento cuando se conecta a WhatsApp"""
         logger.info("⚡ ¡Conectado a WhatsApp!")
 
-        # Enviar mensaje de confirmación si es un reinicio
-        if self._reload_notification_sent and self.my_number:
+        # Enviar mensaje de confirmación si es un reinicio y tenemos el JID
+        if self._reload_notification_sent and self.my_jid:
             try:
-                # Crear JID para enviar mensaje a uno mismo
-                jid = WATypes.NewJID(self.my_number + "@s.whatsapp.net")
-                client.send_message(jid, f"{BOT_PREFIX}✅ Bot reiniciado exitosamente")
+                # Crear JID desde el string guardado
+                from neonize.proto.wa import JID
+                jid_obj = JID()
+                jid_obj.ParseFromString(bytes.fromhex(self.my_jid.split('@')[0]))
+
+                client.send_message(jid_obj, f"{BOT_PREFIX}✅ Bot reiniciado exitosamente")
                 logger.info("📤 Mensaje de reinicio enviado")
             except Exception as e:
                 logger.warning(f"⚠️ No se pudo enviar mensaje de reinicio: {e}")
@@ -232,9 +288,12 @@ class WhatsAppBot:
     def on_pair_status(self, _: NewClient, message: PairStatusEv):
         """Evento cuando se completa el emparejamiento"""
         self.my_number = str(message.ID.User)
+        self.my_jid = str(message.ID)  # Guardar JID completo
+        self._save_my_jid(self.my_jid)  # Guardar en DB
+
         logger.info(f"✅ Sesión guardada exitosamente")
         logger.info(f"📱 Tu número: {self.my_number}")
-        logger.info(f"📱 Tu JID completo: {message.ID}")
+        logger.info(f"📱 Tu JID completo: {self.my_jid}")
         logger.info(f"💾 Credenciales guardadas en: {DB_PATH}")
         logger.info(f"🔒 Solo responderás a self-messages (mensajes que te envías a ti mismo)")
 
