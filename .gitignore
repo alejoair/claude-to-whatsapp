@@ -5,6 +5,10 @@ whatsapp.log
 # Claude session mappings
 claude_sessions.json
 
+# Bot data
+bot_data.db
+.reload_flag
+
 # Python
 __pycache__/
 *.py[cod]
@@ -29,6 +33,8 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.pytest_cache/
+.coverage
 
 # IDEs
 .vscode/
