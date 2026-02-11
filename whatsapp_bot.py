@@ -7,9 +7,8 @@ import sys
 import subprocess
 import json
 import sqlite3
-import signal
-import atexit
 import time
+import glob
 
 # Crear directorio de configuración
 CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".claude-to-whatsapp")
@@ -48,11 +47,9 @@ class WhatsAppBot:
     def __init__(self):
         self.client = None
         self.my_number = None
-        self.my_jid = None  # JID completo para enviar mensajes a uno mismo
         self.pending_requests = {}  # chat_key -> {'start_time': timestamp, 'prompt': str, 'chat': chat_obj}
         self._notification_thread = None
         self._notification_running = False
-        self._notification_lock = None  # Lock para thread safety
         self.system_prompt = None  # System prompt personalizado
         self.agents_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".claude", "agents")
 
@@ -98,9 +95,9 @@ class WhatsAppBot:
                                 seconds = elapsed % 60
 
                                 if minutes > 0:
-                                    time_msg = f"{SYS_PREFIX}BOTSYS:⏳ Tiempo transcurrido: {minutes}m {seconds}s"
+                                    time_msg = f"BOTSYS:⏳ Tiempo transcurrido: {minutes}m {seconds}s"
                                 else:
-                                    time_msg = f"{SYS_PREFIX}BOTSYS:⏳ Tiempo transcurrido: {seconds}s"
+                                    time_msg = f"BOTSYS:⏳ Tiempo transcurrido: {seconds}s"
 
                                 try:
                                     req_data['client'].send_message(req_data['chat'], time_msg)
@@ -266,20 +263,30 @@ class WhatsAppBot:
                             yaml_content = parts[1]
                             markdown_content = parts[2].strip()
 
-                            # Parsear YAML simple (extraer name y description)
+                            # Parsear YAML simple (extraer name, description, tools, skills, model)
                             name = None
                             description = ""
+                            agent_def = {"prompt": markdown_content}
+
                             for line in yaml_content.split('\n'):
+                                line = line.strip()
                                 if line.startswith('name:'):
                                     name = line.split(':', 1)[1].strip()
                                 elif line.startswith('description:'):
-                                    description = line.split(':', 1)[1].strip()
+                                    agent_def["description"] = line.split(':', 1)[1].strip()
+                                elif line.startswith('tools:'):
+                                    tools_str = line.split(':', 1)[1].strip()
+                                    if tools_str:
+                                        agent_def["tools"] = [t.strip() for t in tools_str.split(',')]
+                                elif line.startswith('skills:'):
+                                    skills_str = line.split(':', 1)[1].strip()
+                                    if skills_str:
+                                        agent_def["skills"] = [s.strip() for s in skills_str.split(',')]
+                                elif line.startswith('model:'):
+                                    agent_def["model"] = line.split(':', 1)[1].strip()
 
                             if name:
-                                agents[name] = {
-                                    "description": description,
-                                    "prompt": markdown_content
-                                }
+                                agents[name] = agent_def
                                 logger.debug(f"📜 Agente cargado: {name}")
                 except Exception as e:
                     logger.warning(f"⚠️ Error leyendo {md_file}: {e}")
@@ -332,17 +339,24 @@ class WhatsAppBot:
             # Construir comando base
             base_cmd = "claude"
 
+            # Variable para archivo temporal de agentes
+            temp_agents_file = None
+
+            # Agregar --agents si hay agentes definidos
+            if agents_json:
+                # Crear archivo temporal con el JSON de agentes
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
+                    f.write(agents_json)
+                    temp_agents_file = f.name
+                logger.debug(f"📝 Archivo temporal de agentes: {temp_agents_file}")
+                base_cmd += f' --agents @{temp_agents_file}'
+
             # Agregar --append-system-prompt si existe un system prompt personalizado
             if self.system_prompt:
                 # Escapar comillas dobles en el prompt
                 escaped_prompt = self.system_prompt.replace('"', '\\"')
                 base_cmd += f' --append-system-prompt "{escaped_prompt}"'
-
-            # Agregar --agents si hay agentes definidos
-            if agents_json:
-                # Escapar comillas dobles en el JSON
-                escaped_agents = agents_json.replace('"', '\\"')
-                base_cmd += f' --agents \'{escaped_agents}\''
 
             # Construir comando completo
             if session_id:
@@ -401,6 +415,14 @@ class WhatsAppBot:
         except Exception as e:
             logger.error(f"❌ Error ejecutando comando Claude: {e}")
             return "Hubo un error al comunicarme con Claude.", None
+        finally:
+            # Limpiar archivo temporal de agentes si existe
+            if temp_agents_file and os.path.exists(temp_agents_file):
+                try:
+                    os.remove(temp_agents_file)
+                    logger.debug(f"🗑️ Archivo temporal eliminado: {temp_agents_file}")
+                except Exception as e:
+                    logger.warning(f"⚠️ No se pudo eliminar archivo temporal: {e}")
 
     def ask_claude_async(self, chat, client, prompt, session_id, chat_key):
         """
