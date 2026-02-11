@@ -463,7 +463,6 @@ class WhatsAppBot:
                 with self._notification_lock:
                     if chat_key in self.pending_requests:
                         del self.pending_requests[chat_key]
-                        logger.info(f"✅ Solicitud completada y eliminada para {chat_key}")
 
         # Iniciar thread de procesamiento de Claude
         thread = threading.Thread(target=_process, daemon=True)
