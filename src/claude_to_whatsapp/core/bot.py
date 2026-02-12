@@ -56,6 +56,7 @@ class WhatsAppBot:
         self.my_number: str | None = self._load_my_number()
         self.my_jid: str | None = None
         self._connect_thread: threading.Thread | None = None
+        self._startup_message_sent = False  # Flag para mensaje de inicio
 
         # Cargar system_prompt del directorio actual
         self.system_prompt = self._load_system_prompt()
@@ -87,6 +88,8 @@ class WhatsAppBot:
         def connect_thread():
             try:
                 self.whatsapp_client.connect()
+                # Enviar mensaje de inicio después de conectar
+                self._send_startup_message()
             except Exception as e:
                 logger.error(f"❌ Error al conectar: {e}")
 
@@ -108,6 +111,12 @@ class WhatsAppBot:
         try:
             while running:
                 time.sleep(0.5)
+
+                # Enviar mensaje de inicio si está conectado y no se ha enviado
+                if not self._startup_message_sent and self.whatsapp_client.is_connected():
+                    self._send_startup_message()
+                    self._startup_message_sent = True
+
                 if self._connect_thread and not self._connect_thread.is_alive():
                     logger.warning("⚠️ La conexión de WhatsApp terminó")
                     running = False
@@ -130,7 +139,34 @@ class WhatsAppBot:
         """Evento cuando se conecta a WhatsApp."""
         logger.info("⚡ ¡Conectado a WhatsApp!")
 
-    def on_pair_status(self, _: WhatsAppClient, message: PairStatusEv) -> None:
+        # Enviar mensaje a sí mismo con información de la sesión
+        try:
+            # Esperar un momento para que my_jid esté disponible
+            import time
+            time.sleep(1)
+
+            my_jid = self.config_repo.get("my_jid")
+            if my_jid:
+                from neonize.proto.Neonize_pb2 import JID
+                chat_jid = JID()
+                chat_jid.User = my_jid.split('@')[0]
+                chat_jid.Server = my_jid.split('@')[1] if '@' in my_jid else 's.whatsapp.net'
+
+                msg = f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                msg += f"✅ claude-to-whatsapp v0.1.0 iniciado\n\n"
+                msg += f"📂 Dir trabajo: {self.config.work_dir}\n"
+                msg += f"📁 DB WhatsApp: {self.config.whatsapp.db_path}\n"
+                msg += f"📁 DB Bot: {os.path.join(self.config.bot.data_dir, 'bot_data.db')}\n"
+                msg += f"📁 Logs: {os.path.join(self.config.work_dir, 'whatsapp.log')}\n\n"
+                msg += f"ℹ️ Envíate un comando como BOTSET:help para más información"
+                msg += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+                client.send_message(chat_jid, msg)
+                logger.info("📤 Mensaje de inicio enviado")
+        except Exception as e:
+            logger.error(f"❌ Error enviando mensaje de inicio: {e}")
+
+    def on_pair_status(self, client: WhatsAppClient, message: PairStatusEv) -> None:
         """Evento cuando se completa el emparejamiento."""
         self.my_number = str(message.ID.User)
         self.my_jid = str(message.ID)
@@ -141,30 +177,82 @@ class WhatsAppBot:
 
         logger.info(f"✅ Sesión guardada. Tu número: {self.my_number}")
 
+        # Enviar mensaje de inicio a sí mismo
+        try:
+            msg = f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += f"✅ claude-to-whatsapp v0.1.0 iniciado\n\n"
+            msg += f"📂 Dir trabajo: {self.config.work_dir}\n"
+            msg += f"📁 DB WhatsApp: {self.config.whatsapp.db_path}\n"
+            msg += f"📁 DB Bot: {os.path.join(self.config.bot.data_dir, 'bot_data.db')}\n"
+            msg += f"📁 Logs: {os.path.join(self.config.work_dir, 'whatsapp.log')}\n\n"
+            msg += f"ℹ️ Envíate un comando como BOTSET:help para más información"
+            msg += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+            client.send_message(message.ID, msg)
+            logger.info("📤 Mensaje de inicio enviado")
+        except Exception as e:
+            logger.error(f"❌ Error enviando mensaje de inicio: {e}")
+
     def on_history_sync(self, client: WhatsAppClient, history: HistorySyncEv) -> None:
         """Evento cuando se sincroniza el historial."""
         pass
+
+    def _send_startup_message(self) -> None:
+        """Envía mensaje de inicio a sí mismo."""
+        try:
+            # Obtener my_number (que tiene el formato simple)
+            my_number = self.config_repo.get("my_number")
+            if not my_number:
+                logger.warning("⚠️ No se encontró my_number en DB, no se puede enviar mensaje de inicio")
+                return
+
+            from neonize.proto.Neonize_pb2 import JID
+            chat_jid = JID()
+            chat_jid.User = my_number
+            chat_jid.Server = "s.whatsapp.net"
+            chat_jid.RawAgent = 0
+            chat_jid.Device = 0
+            chat_jid.Integrator = 0
+
+            msg = f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += f"✅ claude-to-whatsapp v0.1.0 iniciado\n\n"
+            msg += f"📂 Dir trabajo: {self.config.work_dir}\n"
+            msg += f"📁 DB WhatsApp: {self.config.whatsapp.db_path}\n"
+            msg += f"📁 DB Bot: {os.path.join(self.config.bot.data_dir, 'bot_data.db')}\n"
+            msg += f"📁 Logs: {os.path.join(self.config.work_dir, 'whatsapp.log')}\n\n"
+            msg += f"ℹ️ Envíate un comando como BOTSET:help para más información"
+            msg += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+            self.whatsapp_client.send_message(chat_jid, msg)
+            logger.info("📤 Mensaje de inicio enviado")
+        except Exception as e:
+            logger.error(f"❌ Error enviando mensaje de inicio: {e}", exc_info=True)
 
     def on_message(self, client: WhatsAppClient, message: MessageEv) -> None:
         """Evento cuando se recibe un mensaje."""
         try:
             # Extraer texto
             text = MessageFilter.extract_text(message)
+            msg_source = message.Info.MessageSource
+
+            logger.info(f"📥 Mensaje recibido - IsFromMe: {msg_source.IsFromMe}, Sender: {msg_source.Sender.User}, Chat: {msg_source.Chat.User}, Text: {text}")
+
             if not text:
                 return
 
             text = text.strip()
-            msg_source = message.Info.MessageSource
 
             # Filtrar mensajes del sistema
             if MessageFilter.is_system_message(text):
+                logger.info("⏭️ Ignorando mensaje del sistema")
                 return
 
             # Filtrar: solo self-messages
             if not MessageFilter.is_self_message(msg_source):
+                logger.info("⏭️ Ignorando mensaje (no es self-message)")
                 return
 
-            logger.info(f"💬 Mensaje: {text}")
+            logger.info(f"💬 Mensaje procesado: {text}")
 
             # Procesar comandos del bot
             if MessageFilter.is_bot_command(text):
@@ -259,6 +347,8 @@ class WhatsAppBot:
 
     def _ask_claude_async(self, chat, client: WhatsAppClient, prompt: str, chat_key: str) -> None:
         """Envía prompt a Claude de forma asíncrona."""
+        import time
+
         # Registrar solicitud pendiente
         self.notification_thread.add_request(
             chat_key,
@@ -269,8 +359,6 @@ class WhatsAppBot:
                 "prompt": prompt,
             }
         )
-
-        import time
 
         def _process():
             try:

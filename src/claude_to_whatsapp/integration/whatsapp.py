@@ -22,7 +22,17 @@ class WhatsAppClient(MessageClient):
     def connect(self) -> None:
         """Connect to WhatsApp."""
         self._client = NewClient(self.db_path)
+
+        # Registrar handlers pendientes después de crear el cliente
+        self._register_pending_handlers()
+
         self._client.connect()
+
+    def _register_pending_handlers(self) -> None:
+        """Registra todos los handlers pendientes en el cliente."""
+        for event_type, handler_list in self._handlers.items():
+            for handler in handler_list:
+                self._client.event(event_type)(handler)
 
     def disconnect(self) -> None:
         """Disconnect from WhatsApp."""
@@ -47,3 +57,8 @@ class WhatsAppClient(MessageClient):
         """
         if self._client:
             self._client.event(event_type)(handler)
+        else:
+            # Guardar handler para cuando el cliente se cree
+            if event_type not in self._handlers:
+                self._handlers[event_type] = []
+            self._handlers[event_type].append(handler)
