@@ -306,10 +306,8 @@ class WhatsAppBot:
         """
         try:
             new_prompt = self._load_system_prompt()
-            if new_prompt is None:
-                logger.warning("⚠️ No se encontró system_prompt.txt en la nueva carpeta")
-                return False
-            self.system_prompt = new_prompt
+            # system_prompt.txt es opcional, permitir que no exista
+            self.system_prompt = new_prompt or ""
             logger.info("✅ Recursos recargados exitosamente")
             return True
         except Exception as e:
