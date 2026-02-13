@@ -77,7 +77,7 @@ class ClaudeClient(AIModelClient):
             List of command arguments.
         """
         # Usar PowerShell para Windows
-        ps_script = f"claude --output-format json --dangerously-skip-permissions"
+        ps_script = f"claude --output-format json --permission-mode bypassPermissions"
         if session_id:
             ps_script += f' -r "{session_id}" "{prompt}"'
         else:

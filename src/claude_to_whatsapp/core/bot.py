@@ -63,12 +63,16 @@ class WhatsAppBot:
 
     def _register_commands(self) -> None:
         """Register bot commands."""
-        from .commands import reload_command, logout_command, status_command, help_command
+        from .commands import (
+            reload_command, logout_command, status_command, help_command, workdir_command
+        )
 
         self.command_registry.register("reload", reload_command, "Reinicia el bot")
         self.command_registry.register("logout", logout_command, "Cierra sesión de WhatsApp")
         self.command_registry.register("status", status_command, "Muestra estado del bot")
         self.command_registry.register("help", help_command, "Muestra ayuda")
+        self.command_registry.register("workdir", workdir_command, "Cambia carpeta de trabajo")
+        self.command_registry.register("cd", workdir_command, "Alias para workdir")
 
     def run(self) -> None:
         """Run the bot main loop."""
@@ -151,6 +155,9 @@ class WhatsAppBot:
                 chat_jid = JID()
                 chat_jid.User = my_jid.split('@')[0]
                 chat_jid.Server = my_jid.split('@')[1] if '@' in my_jid else 's.whatsapp.net'
+                chat_jid.RawAgent = 0
+                chat_jid.Device = 0
+                chat_jid.Integrator = 0
 
                 msg = f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 msg += f"✅ claude-to-whatsapp v0.1.0 iniciado\n\n"
@@ -256,8 +263,12 @@ class WhatsAppBot:
 
             # Procesar comandos del bot
             if MessageFilter.is_bot_command(text):
-                command = text[7:].strip().lower()  # Remover "BOTSET:"
-                result = self.command_registry.execute(command, self, message, client)
+                # Pasar texto completo al comando (incluye argumentos)
+                command_text = text[7:].strip()  # Remover "BOTSET:"
+                # Obtener nombre del comando (primera palabra)
+                command_name = command_text.split()[0].lower() if command_text.split() else ""
+                # Pasar texto completo como último argumento
+                result = self.command_registry.execute(command_name, self, message, client, command_text)
                 if result:
                     client.send_message(message.Info.MessageSource.Chat, result)
                 return
@@ -286,6 +297,24 @@ class WhatsAppBot:
         except Exception as e:
             logger.warning(f"⚠️ Error cargando system_prompt: {e}")
             return None
+
+    def reload_resources(self) -> bool:
+        """Recarga recursos (system_prompt) del work_dir actual.
+
+        Returns:
+            True si los recursos se recargaron exitosamente, False si hubo errores.
+        """
+        try:
+            new_prompt = self._load_system_prompt()
+            if new_prompt is None:
+                logger.warning("⚠️ No se encontró system_prompt.txt en la nueva carpeta")
+                return False
+            self.system_prompt = new_prompt
+            logger.info("✅ Recursos recargados exitosamente")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Error recargando recursos: {e}")
+            return False
 
     def _load_agents(self) -> str | None:
         """Carga agentes del directorio .claude/agents/."""
@@ -365,8 +394,11 @@ class WhatsAppBot:
                 session_id = self.config_repo.get("claude_session_id")
                 response, new_session_id = self.claude_client.ask(prompt, session_id)
 
-                # Guardar session_id si cambió
+                # Guardar session_id si cambío (usando clave del work_dir actual)
                 if new_session_id and new_session_id != session_id:
+                    from .commands import _get_session_key
+                    session_key = _get_session_key(self.config.work_dir)
+                    self.config_repo.set(session_key, new_session_id)
                     self.config_repo.set("claude_session_id", new_session_id)
 
                 # Enviar respuesta

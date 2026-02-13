@@ -4,6 +4,7 @@ import os
 import sys
 import subprocess
 import logging
+import hashlib
 from typing import Callable, Dict, List
 from dataclasses import dataclass
 
@@ -120,10 +121,98 @@ def status_command(bot, message, client) -> str:
     return status
 
 
+def _get_work_dir_hash(work_dir: str) -> str:
+    """Genera un hash único para un work_dir."""
+    return hashlib.md5(work_dir.encode()).hexdigest()
+
+
+def _get_session_key(work_dir: str) -> str:
+    """Obtiene la clave para almacenar session_id de un work_dir."""
+    return f"claude_session_id:{_get_work_dir_hash(work_dir)}"
+
+
+def _clear_session_for_workdir(bot, work_dir: str) -> None:
+    """Limpia el session_id para un work_dir específico."""
+    session_key = _get_session_key(work_dir)
+    bot.config_repo.delete(session_key)
+
+
+def workdir_command(bot, message, client, command_text: str = "") -> str:
+    """Cambia la carpeta de trabajo."""
+    # Extraer ruta del comando: "workdir /ruta" o "cd /ruta"
+    # command_text ya está sin el prefijo "BOTSET:"
+    text = command_text.strip().lower()
+
+    if not text:
+        return f"{BOT_PREFIX}Error: Comando vacío"
+
+    # Obtener nombre del comando y argumentos
+    parts = text.split(maxsplit=1)
+    cmd_name = parts[0]
+    path_arg = parts[1].strip() if len(parts) > 1 else ""
+
+    # Solo workdir o cd son válidos
+    if cmd_name not in ("workdir", "cd"):
+        return f"{BOT_PREFIX}Comando desconocido"
+
+    if not path_arg:
+        # Sin argumentos, mostrar work_dir actual
+        return f"{BOT_PREFIX}Carpeta actual:\n{bot.config.work_dir}"
+
+    # Guardar session_id del work_dir actual antes de cambiar
+    old_work_dir = bot.config.work_dir
+    current_session_id = bot.config_repo.get("claude_session_id")
+    if current_session_id:
+        old_session_key = _get_session_key(old_work_dir)
+        bot.config_repo.set(old_session_key, current_session_id)
+
+    # Intentar cambiar work_dir
+    if not bot.config.set_work_dir(path_arg):
+        return f"{BOT_PREFIX}Error: La ruta '{path_arg}' no existe o no es un directorio"
+
+    new_work_dir = bot.config.work_dir
+
+    # Validar recursos (system_prompt.txt debe existir)
+    if not os.path.exists(bot.config.system_prompt_path):
+        # Revertir cambio
+        bot.config.work_dir = old_work_dir
+        return f"{BOT_PREFIX}Error: No se encontró system_prompt.txt en '{new_work_dir}'"
+
+    # Recargar recursos
+    if not bot.reload_resources():
+        # Revertir cambio
+        bot.config.work_dir = old_work_dir
+        bot.reload_resources()  # Recargar recursos originales
+        return f"{BOT_PREFIX}Error: No se pudieron recargar los recursos"
+
+    # Cargar session_id para el nuevo work_dir
+    new_session_key = _get_session_key(new_work_dir)
+    new_session_id = bot.config_repo.get(new_session_key)
+
+    # Actualizar session_id activo
+    if new_session_id:
+        bot.config_repo.set("claude_session_id", new_session_id)
+    else:
+        # No hay session_id para este work_dir, limpiar el actual
+        bot.config_repo.delete("claude_session_id")
+
+    logger.info(f"📂 Work_dir cambiado: {old_work_dir} -> {new_work_dir}")
+
+    response = f"{BOT_PREFIX}Carpeta de trabajo cambiada\n\n"
+    response += f"📂 Nueva ruta: {new_work_dir}\n"
+    if new_session_id:
+        response += f"🔄 Sesión restaurada\n"
+    else:
+        response += f"🆕 Nueva sesión iniciada\n"
+    response += f"📜 System prompt recargado"
+
+    return response
+
+
 def help_command(bot, message, client) -> str:
     """Muestra ayuda."""
     help_text = f"Comandos disponibles:\n"
     for cmd in bot.command_registry.list_all():
         help_text += f"• BOTSET:{cmd.name} - {cmd.description}\n"
-    help_text += f"\nMensajes BOTSYS: son del sistema y se ignoran."
+    help_text += "\nMensajes BOTSYS: son del sistema y se ignoran."
     return help_text

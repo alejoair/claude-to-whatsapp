@@ -78,3 +78,22 @@ class Config:
     def system_prompt_path(self) -> str:
         """Path to system_prompt.txt in working directory."""
         return os.path.join(self.work_dir, "system_prompt.txt")
+
+    def set_work_dir(self, path: str) -> bool:
+        """Set a new working directory.
+
+        Args:
+            path: New working directory path (can be relative or absolute).
+
+        Returns:
+            True if work_dir was changed successfully, False otherwise.
+        """
+        # Convertir a ruta absoluta y normalizar
+        new_path = os.path.abspath(os.path.expanduser(path))
+
+        # Validar que existe y es directorio
+        if not os.path.isdir(new_path):
+            return False
+
+        self.work_dir = new_path
+        return True
