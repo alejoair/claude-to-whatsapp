@@ -172,17 +172,17 @@ def workdir_command(bot, message, client, command_text: str = "") -> str:
 
     new_work_dir = bot.config.work_dir
 
-    # Validar recursos (system_prompt.txt debe existir)
-    if not os.path.exists(bot.config.system_prompt_path):
-        # Revertir cambio
-        bot.config.work_dir = old_work_dir
-        return f"{BOT_PREFIX}Error: No se encontró system_prompt.txt en '{new_work_dir}'"
+    # Guardar session_id del work_dir actual antes de cambiar
+    old_work_dir = bot.config.work_dir
+    current_session_id = bot.config_repo.get("claude_session_id")
+    if current_session_id:
+        old_session_key = _get_session_key(old_work_dir)
+        bot.config_repo.set(old_session_key, current_session_id)
 
-    # Recargar recursos
+    # Recargar recursos para el nuevo directorio
     if not bot.reload_resources():
         # Revertir cambio
         bot.config.work_dir = old_work_dir
-        bot.reload_resources()  # Recargar recursos originales
         return f"{BOT_PREFIX}Error: No se pudieron recargar los recursos"
 
     # Cargar session_id para el nuevo work_dir
