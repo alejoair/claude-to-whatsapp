@@ -217,6 +217,10 @@ class WhatsAppBot:
             chat_jid = JID()
             chat_jid.User = my_number
             chat_jid.Server = "s.whatsapp.net"
+            chat_jid.Device = 0  # Tipo: móvil/desktop
+            chat_jid.Integrator = 0  # Integración: WhatsApp
+            chat_jid.RawAgent = 0  # No es un agente
+            chat_jid.AD = 0  # Active Directory desactivado
             chat_jid.RawAgent = 0
             chat_jid.Device = 0
             chat_jid.Integrator = 0

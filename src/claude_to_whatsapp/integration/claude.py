@@ -3,10 +3,11 @@
 import subprocess
 import json
 import logging
+import platform
+import shlex
 from typing import Optional, Tuple
 from .base import AIModelClient
 from ..exceptions import ClaudeTimeoutError, ClaudeConnectionError
-
 
 logger = logging.getLogger(__name__)
 
@@ -49,38 +50,41 @@ class ClaudeClient(AIModelClient):
                 timeout=self.timeout,
                 encoding="utf-8",
             )
-
-            if result.returncode != 0:
-                raise ClaudeConnectionError(
-                    f"Error del comando Claude: {result.stderr[:200]}"
-                )
-
-            response = json.loads(result.stdout)
-            return response.get("result", ""), response.get("session_id", "")
-
         except subprocess.TimeoutExpired:
             logger.error("⏱️ Timeout esperando respuesta de Claude")
             raise ClaudeTimeoutError(f"Timeout después de {self.timeout}s")
-
         except json.JSONDecodeError as e:
             logger.error(f"❌ Error parseando JSON de Claude: {e}")
             raise ClaudeConnectionError(f"Invalid JSON response: {e}")
+
+        response = json.loads(result.stdout)
+        return response.get("result", ""), response.get("session_id", "")
 
     def _build_command(self, prompt: str, session_id: Optional[str]) -> list[str]:
         """Build Claude CLI command.
 
         Args:
-            prompt: The prompt to send.
+            prompt: The prompt to send to Claude.
             session_id: Session ID for existing conversation.
 
         Returns:
             List of command arguments.
         """
-        # Usar PowerShell para Windows
-        ps_script = f"claude --output-format json --permission-mode bypassPermissions"
-        if session_id:
-            ps_script += f' -r "{session_id}" "{prompt}"'
-        else:
-            ps_script += f' -p "{prompt}"'
+        # Escapar el prompt de forma segura con shlex
+        safe_prompt = shlex.quote(prompt)
 
-        return ["powershell", "-Command", ps_script]
+        # Comandos base según plataforma
+        if platform.system() == "Windows":
+            cmd = ["powershell", "-Command",
+                    f'claude --output-format json --permission-mode bypassPermissions -p {safe_prompt}']
+        elif platform.system() == "Darwin":  # macOS
+            cmd = ["bash", "-c",
+                    f'claude --output-format json --permission-mode bypassPermissions -p {safe_prompt}']
+        else:  # Linux, Android, Termux, etc.
+            cmd = ["bash", "-c",
+                    f'claude --output-format json --permission-mode bypassPermissions -p {safe_prompt}']
+
+        if session_id:
+            cmd.append(f"-r \"{session_id}\"")
+
+        return cmd
