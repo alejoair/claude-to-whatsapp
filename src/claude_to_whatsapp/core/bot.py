@@ -141,7 +141,7 @@ class WhatsAppBot:
 
     def on_connected(self, client: WhatsAppClient, _: ConnectedEv) -> None:
         """Evento cuando se conecta a WhatsApp."""
-        logger.info("⚡ ¡Conectado a WhatsApp!")
+        logger.info("[on_connected] ⚡ ¡Conectado a WhatsApp!")
 
         # Enviar mensaje a sí mismo con información de la sesión
         try:
@@ -220,10 +220,6 @@ class WhatsAppBot:
             chat_jid.Device = 0  # Tipo: móvil/desktop
             chat_jid.Integrator = 0  # Integración: WhatsApp
             chat_jid.RawAgent = 0  # No es un agente
-            chat_jid.AD = 0  # Active Directory desactivado
-            chat_jid.RawAgent = 0
-            chat_jid.Device = 0
-            chat_jid.Integrator = 0
 
             msg = f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             msg += f"✅ claude-to-whatsapp v0.1.0 iniciado\n\n"
@@ -241,6 +237,7 @@ class WhatsAppBot:
 
     def on_message(self, client: WhatsAppClient, message: MessageEv) -> None:
         """Evento cuando se recibe un mensaje."""
+        logger.info("[on_message] === MENSAJE RECIBIDO ===")
         try:
             # Extraer texto
             text = MessageFilter.extract_text(message)
