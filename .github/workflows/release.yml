@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+    branches:
+      - develop
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          pip install build
+
+      - name: Bump version and create release
+        env:
+          GH_TOKEN: "$GITHUB_TOKEN"
+        run: |
+          CURRENT_VERSION=$(grep "^version" pyproject.toml | cut -d"'" -f2)
+
+          if [ "$GITHUB_REF" == "refs/tags/" ]; then
+            NEW_VERSION="$GITHUB_REF_NAME"
+          else
+            IFS="." read -r -a. parts <<< "$CURRENT_VERSION"
+            MAJOR="${parts[0]}"
+            MINOR="${parts[1]}"
+            PATCH="${parts[2]}"
+            PATCH=$((PATCH + 1))
+            NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+            TAG_NAME="v$NEW_VERSION"
+
+            sed -i "s/version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" pyproject.toml
+
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add pyproject.toml
+            git commit -m "chore: bump version to $NEW_VERSION"
+            git tag "$TAG_NAME"
+            git push origin develop
+            git push origin "$TAG_NAME"
+
+          gh release create "$TAG_NAME" --title "$TAG_NAME" --notes "Release $TAG_NAME" --generate-notes
+
+      - name: Build and publish to PyPI
+        env:
+          TWINE_USERNAME_TOKEN: "$TWINE_USERNAME_TOKEN"
+        run: |
+          pip install build twine
+          python -m build
+          twine upload --skip-existing --username __token__ --password $TWINE_USERNAME_TOKEN dist/*
