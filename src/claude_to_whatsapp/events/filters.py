@@ -73,3 +73,32 @@ class MessageFilter:
             return None
 
         return None
+
+    @staticmethod
+    def has_image(message) -> bool:
+        """Check if message contains an image.
+
+        Args:
+            message: WhatsApp message object.
+
+        Returns:
+            True if message contains an image.
+        """
+        msg = message.Message
+        return hasattr(msg, "imageMessage") and msg.imageMessage
+
+    @staticmethod
+    def extract_image_caption(message) -> str | None:
+        """Extract image caption from WhatsApp message.
+
+        Args:
+            message: WhatsApp message object.
+
+        Returns:
+            Image caption or None if not found.
+        """
+        msg = message.Message
+        if hasattr(msg, "imageMessage") and msg.imageMessage:
+            if hasattr(msg.imageMessage, "caption"):
+                return str(msg.imageMessage.caption) if msg.imageMessage.caption else None
+        return None

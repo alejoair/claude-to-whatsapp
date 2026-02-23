@@ -209,15 +209,29 @@ class WhatsAppBot:
             text = MessageFilter.extract_text(message)
             msg_source = message.Info.MessageSource
 
-            logger.info(f"📥 Mensaje recibido - IsFromMe: {msg_source.IsFromMe}, Sender: {msg_source.Sender.User}, Chat: {msg_source.Chat.User}, Text: {text}")
+            # Detectar si hay imagen
+            has_image = MessageFilter.has_image(message)
+            image_path = None
 
-            if not text:
+            logger.info(f"📥 Mensaje recibido - IsFromMe: {msg_source.IsFromMe}, Sender: {msg_source.Sender.User}, Chat: {msg_source.Chat.User}, Text: {text}, Image: {has_image}")
+
+            # Si hay imagen, descargarla
+            if has_image:
+                image_path = self._download_image(message)
+                if image_path:
+                    logger.info(f"📷 Imagen descargada: {image_path}")
+                    # Usar caption como texto si existe
+                    if not text:
+                        text = MessageFilter.extract_image_caption(message) or "Analiza esta imagen"
+
+            if not text and not has_image:
                 return
 
-            text = text.strip()
+            if text:
+                text = text.strip()
 
             # Filtrar mensajes del sistema
-            if MessageFilter.is_system_message(text):
+            if text and MessageFilter.is_system_message(text):
                 logger.info("⏭️ Ignorando mensaje del sistema")
                 return
 
@@ -229,7 +243,7 @@ class WhatsAppBot:
             logger.info(f"💬 Mensaje procesado: {text}")
 
             # Procesar comandos del bot
-            if MessageFilter.is_bot_command(text):
+            if text and MessageFilter.is_bot_command(text):
                 # Pasar texto completo al comando (incluye argumentos)
                 command_text = text[7:].strip()  # Remover "BOTSET:"
                 # Obtener nombre del comando (primera palabra)
@@ -242,7 +256,7 @@ class WhatsAppBot:
 
             # Enviar a Claude
             chat = message.Info.MessageSource.Chat
-            self._ask_claude_async(chat, client, text, str(chat))
+            self._ask_claude_async(chat, client, text or "Analiza esta imagen", str(chat), image_path)
 
         except AttributeError:
             pass
@@ -341,9 +355,35 @@ class WhatsAppBot:
         """Carga el número guardado."""
         return self.config_repo.get("my_number")
 
-    def _ask_claude_async(self, chat, client: WhatsAppClient, prompt: str, chat_key: str) -> None:
+    def _download_image(self, message) -> str | None:
+        """Descarga imagen de WhatsApp a carpeta temporal.
+
+        Args:
+            message: WhatsApp message with image.
+
+        Returns:
+            Path to downloaded image or None if failed.
+        """
+        try:
+            import datetime
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"image_{timestamp}.jpg"
+            image_path = os.path.join(self.config.bot.temp_images_dir, filename)
+
+            # Descargar usando WhatsAppClient
+            self.whatsapp_client.download_media(message, image_path)
+            return image_path
+        except Exception as e:
+            logger.error(f"❌ Error descargando imagen: {e}")
+            return None
+
+    def _ask_claude_async(self, chat, client: WhatsAppClient, prompt: str, chat_key: str, image_path: str = None) -> None:
         """Envía prompt a Claude de forma asíncrona."""
         import time
+
+        # Si hay imagen, agregarla al prompt
+        if image_path:
+            prompt = f"{prompt} {image_path}"
 
         # Registrar solicitud pendiente
         self.notification_thread.add_request(

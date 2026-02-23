@@ -27,6 +27,7 @@ class BotConfig:
     """Bot configuration."""
 
     data_dir: str = None  # Se setea en Config
+    temp_images_dir: str = None  # Se setea en Config
     notification_interval: int = 30
 
 
@@ -53,6 +54,10 @@ class Config:
         data_dir = os.path.join(home, ".claude-to-whatsapp")
         os.makedirs(data_dir, exist_ok=True)
 
+        # Directorio para imágenes temporales
+        temp_images_dir = os.path.join(data_dir, "temp_images")
+        os.makedirs(temp_images_dir, exist_ok=True)
+
         # Configurar sub-configuraciones
         self.claude = ClaudeConfig()
         self.whatsapp = WhatsAppConfig(
@@ -61,6 +66,7 @@ class Config:
         )
         self.bot = BotConfig(
             data_dir=data_dir,
+            temp_images_dir=temp_images_dir,
             notification_interval=30,
         )
 

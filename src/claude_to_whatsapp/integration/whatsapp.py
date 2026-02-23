@@ -90,6 +90,43 @@ class WhatsAppClient(MessageClient):
         """Check if connected."""
         return self._client is not None
 
+    def download_media(self, message, path: str) -> None:
+        """Download media from message to path.
+
+        Args:
+            message: WhatsApp message with media.
+            path: Path to save the media.
+        """
+        if not self._client:
+            return
+
+        # Extraer datos de imagen del mensaje
+        msg = message.Message
+        if hasattr(msg, "imageMessage") and msg.imageMessage:
+            img = msg.imageMessage
+            from neonize.utils.enum import MediaType, MediaTypeToMMS
+
+            # Crear MediaType y MMS type
+            media_type = MediaType.MediaImage
+            mms_type = MediaTypeToMMS.MediaImage
+
+            data = self._client.download_media_with_path(
+                direct_path=img.directPath,
+                enc_file_hash=img.fileEncSHA256,
+                file_hash=img.fileSHA256,
+                media_key=img.mediaKey,
+                file_length=img.fileLength,
+                media_type=media_type,
+                mms_type=mms_type
+            )
+
+            # Guardar archivo
+            with open(path, "wb") as f:
+                f.write(data)
+        else:
+            # Fallback a download_any para otros tipos de media
+            self._client.download_any(message, path)
+
     def register_handler(self, event_type, handler: Callable) -> None:
         """Register an event handler.
 
