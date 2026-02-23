@@ -82,17 +82,18 @@ def reload_command(bot, message, client, command_text: str = "") -> str:
     bot.shutdown()
 
     # Reiniciar script (cross-platform)
+    # Usar work_dir actual para mantener la sesión de Claude
     time.sleep(0.5)
     script_full_path = os.path.abspath(sys.argv[0])
-    script_dir = os.path.dirname(script_full_path)
+    work_dir = bot.config.work_dir
 
     if platform.system() == "Windows":
-        cmd = f'cd /d "{script_dir}" && "{sys.executable}" "{script_full_path}"'
+        cmd = f'cd /d "{work_dir}" && "{sys.executable}" "{script_full_path}"'
         subprocess.Popen(f'cmd /c {cmd}', creationflags=subprocess.CREATE_NEW_CONSOLE)
     else:
         # Linux/macOS/Termux
         cmd = [sys.executable, script_full_path]
-        subprocess.Popen(cmd, cwd=script_dir, start_new_session=True)
+        subprocess.Popen(cmd, cwd=work_dir, start_new_session=True)
 
     return f"{BOT_PREFIX}Reiniciando bot..."
 
@@ -217,3 +218,17 @@ def help_command(bot, message, client, command_text: str = "") -> str:
         help_text += f"• BOTSET:{cmd.name} - {cmd.description}\n"
     help_text += "\nMensajes BOTSYS: son del sistema y se ignoran."
     return help_text
+
+
+def newchat_command(bot, message, client, command_text: str = "") -> str:
+    """Inicia una nueva sesión de chat con Claude."""
+    logger.info("Comando newchat recibido")
+
+    # Limpiar session_id del work_dir actual
+    session_key = _get_session_key(bot.config.work_dir)
+    bot.config_repo.delete(session_key)
+
+    # Limpiar también el session_id genérico
+    bot.config_repo.delete("claude_session_id")
+
+    return f"{BOT_PREFIX}🆕 Nueva sesión iniciada\n\nEl próximo mensaje comenzará una conversación nueva con Claude."

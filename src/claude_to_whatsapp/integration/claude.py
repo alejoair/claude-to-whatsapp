@@ -45,6 +45,7 @@ class ClaudeClient(AIModelClient):
 
         try:
             logger.info(f"🤖 Enviando a Claude: {prompt[:50]}...")
+            logger.debug(f"📝 system_prompt_file: {system_prompt_file}")
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -100,13 +101,13 @@ class ClaudeClient(AIModelClient):
         # Construir comando base
         cmd_str = f"claude --output-format json --permission-mode bypassPermissions -p {safe_prompt}"
 
-        # Agregar system_prompt_file si existe
-        # NOTA: Si hay system_prompt_file, NO usar session_id porque -r ignora el nuevo system_prompt
+        # Agregar system_prompt_file si existe (siempre se envía)
         if system_prompt_file:
             safe_file = shlex.quote(system_prompt_file)
             cmd_str += f" --system-prompt-file {safe_file}"
-        # Solo usar session_id si NO hay system_prompt_file (para resumir sesión anterior)
-        elif session_id:
+
+        # Usar session_id para continuar conversación
+        if session_id:
             cmd_str += f" -r {shlex.quote(session_id)}"
 
         # Agregar agents si existe

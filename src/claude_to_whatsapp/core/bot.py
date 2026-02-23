@@ -65,7 +65,7 @@ class WhatsAppBot:
     def _register_commands(self) -> None:
         """Register bot commands."""
         from .commands import (
-            reload_command, logout_command, status_command, help_command, workdir_command
+            reload_command, logout_command, status_command, help_command, workdir_command, newchat_command
         )
 
         self.command_registry.register("reload", reload_command, "Reinicia el bot")
@@ -74,6 +74,7 @@ class WhatsAppBot:
         self.command_registry.register("help", help_command, "Muestra ayuda")
         self.command_registry.register("workdir", workdir_command, "Cambia carpeta de trabajo")
         self.command_registry.register("cd", workdir_command, "Alias para workdir")
+        self.command_registry.register("newchat", newchat_command, "Inicia nueva sesión de chat")
 
     def run(self) -> None:
         """Run the bot main loop."""
@@ -378,6 +379,8 @@ class WhatsAppBot:
                 response, new_session_id = self.claude_client.ask(
                     prompt, session_id, agents=current_agents, system_prompt_file=system_prompt_file
                 )
+
+                logger.info(f"🤖 Respuesta de Claude: {response[:200]}...")
 
                 # Guardar session_id en ambas claves
                 if new_session_id:
