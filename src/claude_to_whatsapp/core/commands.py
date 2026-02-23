@@ -5,6 +5,7 @@ import sys
 import subprocess
 import logging
 import hashlib
+import platform
 from typing import Callable, Dict, List
 from dataclasses import dataclass
 
@@ -67,7 +68,7 @@ class CommandRegistry:
 
 # ========== Command handlers ==========
 
-def reload_command(bot, message, client) -> str:
+def reload_command(bot, message, client, command_text: str = "") -> str:
     """Reinicia el bot."""
     import time
 
@@ -80,16 +81,23 @@ def reload_command(bot, message, client) -> str:
 
     bot.shutdown()
 
-    # Reiniciar script
+    # Reiniciar script (cross-platform)
     time.sleep(0.5)
     script_full_path = os.path.abspath(sys.argv[0])
-    cmd = f'cd /d "{os.path.dirname(script_full_path)}" && "{sys.executable}" "{script_full_path}"'
-    subprocess.Popen(f'cmd /c {cmd}', creationflags=subprocess.CREATE_NEW_CONSOLE)
+    script_dir = os.path.dirname(script_full_path)
+
+    if platform.system() == "Windows":
+        cmd = f'cd /d "{script_dir}" && "{sys.executable}" "{script_full_path}"'
+        subprocess.Popen(f'cmd /c {cmd}', creationflags=subprocess.CREATE_NEW_CONSOLE)
+    else:
+        # Linux/macOS/Termux
+        cmd = [sys.executable, script_full_path]
+        subprocess.Popen(cmd, cwd=script_dir, start_new_session=True)
 
     return f"{BOT_PREFIX}Reiniciando bot..."
 
 
-def logout_command(bot, message, client) -> str:
+def logout_command(bot, message, client, command_text: str = "") -> str:
     """Cierra sesión de WhatsApp."""
     logger.info("Comando de logout recibido")
 
@@ -111,7 +119,7 @@ def logout_command(bot, message, client) -> str:
     sys.exit(0)
 
 
-def status_command(bot, message, client) -> str:
+def status_command(bot, message, client, command_text: str = "") -> str:
     """Muestra estado del bot."""
     session_id = bot.config_repo.get("claude_session_id")
     status = f"Status del Bot:\n"
@@ -141,15 +149,15 @@ def workdir_command(bot, message, client, command_text: str = "") -> str:
     """Cambia la carpeta de trabajo."""
     # Extraer ruta del comando: "workdir /ruta" o "cd /ruta"
     # command_text ya está sin el prefijo "BOTSET:"
-    text = command_text.strip().lower()
+    text = command_text.strip()
 
     if not text:
         return f"{BOT_PREFIX}Error: Comando vacío"
 
     # Obtener nombre del comando y argumentos
     parts = text.split(maxsplit=1)
-    cmd_name = parts[0]
-    path_arg = parts[1].strip() if len(parts) > 1 else ""
+    cmd_name = parts[0].lower()  # Solo el comando en minúscula
+    path_arg = parts[1].strip() if len(parts) > 1 else ""  # Ruta SIN modificar (case-sensitive en Linux)
 
     # Solo workdir o cd son válidos
     if cmd_name not in ("workdir", "cd"):
@@ -171,13 +179,6 @@ def workdir_command(bot, message, client, command_text: str = "") -> str:
         return f"{BOT_PREFIX}Error: La ruta '{path_arg}' no existe o no es un directorio"
 
     new_work_dir = bot.config.work_dir
-
-    # Guardar session_id del work_dir actual antes de cambiar
-    old_work_dir = bot.config.work_dir
-    current_session_id = bot.config_repo.get("claude_session_id")
-    if current_session_id:
-        old_session_key = _get_session_key(old_work_dir)
-        bot.config_repo.set(old_session_key, current_session_id)
 
     # Recargar recursos para el nuevo directorio
     if not bot.reload_resources():
@@ -209,7 +210,7 @@ def workdir_command(bot, message, client, command_text: str = "") -> str:
     return response
 
 
-def help_command(bot, message, client) -> str:
+def help_command(bot, message, client, command_text: str = "") -> str:
     """Muestra ayuda."""
     help_text = f"Comandos disponibles:\n"
     for cmd in bot.command_registry.list_all():

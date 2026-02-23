@@ -58,8 +58,9 @@ class WhatsAppBot:
         self._connect_thread: threading.Thread | None = None
         self._startup_message_sent = False  # Flag para mensaje de inicio
 
-        # Cargar system_prompt del directorio actual
+        # Cargar system_prompt y agentes del directorio actual
         self.system_prompt = self._load_system_prompt()
+        self.agents = self._load_agents()
 
     def _register_commands(self) -> None:
         """Register bot commands."""
@@ -92,8 +93,7 @@ class WhatsAppBot:
         def connect_thread():
             try:
                 self.whatsapp_client.connect()
-                # Enviar mensaje de inicio después de conectar
-                self._send_startup_message()
+                # El mensaje de inicio se envía desde _main_loop cuando esté conectado
             except Exception as e:
                 logger.error(f"❌ Error al conectar: {e}")
 
@@ -119,7 +119,7 @@ class WhatsAppBot:
                 # Enviar mensaje de inicio si está conectado y no se ha enviado
                 if not self._startup_message_sent and self.whatsapp_client.is_connected():
                     self._send_startup_message()
-                    self._startup_message_sent = True
+                    # Nota: _startup_message_sent se marca True dentro del thread
 
                 if self._connect_thread and not self._connect_thread.is_alive():
                     logger.warning("⚠️ La conexión de WhatsApp terminó")
@@ -141,37 +141,9 @@ class WhatsAppBot:
 
     def on_connected(self, client: WhatsAppClient, _: ConnectedEv) -> None:
         """Evento cuando se conecta a WhatsApp."""
+        # El mensaje de inicio se envía desde _main_loop cuando la conexión esté lista
+        # No enviar aquí para evitar el error "usync query timed out"
         pass
-
-        # Enviar mensaje a sí mismo con información de la sesión
-        try:
-            # Esperar un momento para que my_jid esté disponible
-            import time
-            time.sleep(1)
-
-            my_jid = self.config_repo.get("my_jid")
-            if my_jid:
-                from neonize.proto.Neonize_pb2 import JID
-                chat_jid = JID()
-                chat_jid.User = my_jid.split('@')[0]
-                chat_jid.Server = my_jid.split('@')[1] if '@' in my_jid else 's.whatsapp.net'
-                chat_jid.RawAgent = 0
-                chat_jid.Device = 0
-                chat_jid.Integrator = 0
-
-                msg = f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                msg += f"✅ claude-to-whatsapp v0.1.0 iniciado\n\n"
-                msg += f"📂 Dir trabajo: {self.config.work_dir}\n"
-                msg += f"📁 DB WhatsApp: {self.config.whatsapp.db_path}\n"
-                msg += f"📁 DB Bot: {os.path.join(self.config.bot.data_dir, 'bot_data.db')}\n"
-                msg += f"📁 Logs: {os.path.join(self.config.work_dir, 'whatsapp.log')}\n\n"
-                msg += f"ℹ️ Envíate un comando como BOTSET:help para más información"
-                msg += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-                client.send_message(chat_jid, msg)
-                logger.info("📤 Mensaje de inicio enviado")
-        except Exception as e:
-            logger.error(f"❌ Error enviando mensaje de inicio: {e}")
 
     def on_pair_status(self, client: WhatsAppClient, message: PairStatusEv) -> None:
         """Evento cuando se completa el emparejamiento."""
@@ -183,57 +155,51 @@ class WhatsAppBot:
         self.config_repo.set("my_jid", self.my_jid)
 
         logger.info(f"✅ Sesión guardada. Tu número: {self.my_number}")
-
-        # Enviar mensaje de inicio a sí mismo
-        try:
-            msg = f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            msg += f"✅ claude-to-whatsapp v0.1.0 iniciado\n\n"
-            msg += f"📂 Dir trabajo: {self.config.work_dir}\n"
-            msg += f"📁 DB WhatsApp: {self.config.whatsapp.db_path}\n"
-            msg += f"📁 DB Bot: {os.path.join(self.config.bot.data_dir, 'bot_data.db')}\n"
-            msg += f"📁 Logs: {os.path.join(self.config.work_dir, 'whatsapp.log')}\n\n"
-            msg += f"ℹ️ Envíate un comando como BOTSET:help para más información"
-            msg += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-            client.send_message(message.ID, msg)
-            logger.info("📤 Mensaje de inicio enviado")
-        except Exception as e:
-            logger.error(f"❌ Error enviando mensaje de inicio: {e}")
+        # El mensaje de inicio se envía desde _main_loop vía _send_startup_message()
 
     def on_history_sync(self, client: WhatsAppClient, history: HistorySyncEv) -> None:
         """Evento cuando se sincroniza el historial."""
         pass
 
     def _send_startup_message(self) -> None:
-        """Envía mensaje de inicio a sí mismo."""
-        try:
-            # Obtener my_number (que tiene el formato simple)
-            my_number = self.config_repo.get("my_number")
-            if not my_number:
-                logger.warning("⚠️ No se encontró my_number en DB, no se puede enviar mensaje de inicio")
-                return
+        """Envía mensaje de inicio a sí mismo en un thread separado con delay.
+        Esto evita el error "failed to get device list: usync query timed out"
+        """
+        # Marcar flag ANTES de crear el thread para evitar múltiples envíos
+        self._startup_message_sent = True
 
-            from neonize.proto.Neonize_pb2 import JID
-            chat_jid = JID()
-            chat_jid.User = my_number
-            chat_jid.Server = "s.whatsapp.net"
-            chat_jid.Device = 0  # Tipo: móvil/desktop
-            chat_jid.Integrator = 0  # Integración: WhatsApp
-            chat_jid.RawAgent = 0  # No es un agente
+        my_number = self.config_repo.get("my_number")
+        if not my_number:
+            logger.warning("⚠️ No se encontró my_number en DB, no se puede enviar mensaje de inicio")
+            return
 
-            msg = f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            msg += f"✅ claude-to-whatsapp v0.1.0 iniciado\n\n"
-            msg += f"📂 Dir trabajo: {self.config.work_dir}\n"
-            msg += f"📁 DB WhatsApp: {self.config.whatsapp.db_path}\n"
-            msg += f"📁 DB Bot: {os.path.join(self.config.bot.data_dir, 'bot_data.db')}\n"
-            msg += f"📁 Logs: {os.path.join(self.config.work_dir, 'whatsapp.log')}\n\n"
-            msg += f"ℹ️ Envíate un comando como BOTSET:help para más información"
-            msg += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        def send_startup():
+            import time
+            time.sleep(3)  # Esperar a que la conexión se estabilice
+            try:
+                from neonize.proto.Neonize_pb2 import JID
+                chat_jid = JID()
+                chat_jid.User = my_number
+                chat_jid.Server = "s.whatsapp.net"
+                chat_jid.Device = 0
+                chat_jid.Integrator = 0
+                chat_jid.RawAgent = 0
 
-            self.whatsapp_client.send_message(chat_jid, msg)
-            logger.info("📤 Mensaje de inicio enviado")
-        except Exception as e:
-            logger.error(f"❌ Error enviando mensaje de inicio: {e}", exc_info=True)
+                msg = f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                msg += f"✅ claude-to-whatsapp v0.1.0 iniciado\n\n"
+                msg += f"📂 Dir trabajo: {self.config.work_dir}\n"
+                msg += f"📁 DB WhatsApp: {self.config.whatsapp.db_path}\n"
+                msg += f"📁 DB Bot: {os.path.join(self.config.bot.data_dir, 'bot_data.db')}\n"
+                msg += f"📁 Logs: {os.path.join(self.config.work_dir, 'whatsapp.log')}\n\n"
+                msg += f"ℹ️ Envíate un comando como BOTSET:help para más información"
+                msg += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+                self.whatsapp_client.send_message(chat_jid, msg)
+                logger.info("📤 Mensaje de inicio enviado")
+            except Exception as e:
+                logger.warning(f"⚠️ No se pudo enviar mensaje de inicio: {e}")
+
+        threading.Thread(target=send_startup, daemon=True).start()
 
     def on_message(self, client: WhatsAppClient, message: MessageEv) -> None:
         """Evento cuando se recibe un mensaje."""
@@ -299,15 +265,17 @@ class WhatsAppBot:
             return None
 
     def reload_resources(self) -> bool:
-        """Recarga recursos (system_prompt) del work_dir actual.
+        """Recarga recursos (system_prompt, agents) del work_dir actual.
 
         Returns:
             True si los recursos se recargaron exitosamente, False si hubo errores.
         """
         try:
             new_prompt = self._load_system_prompt()
+            new_agents = self._load_agents()
             # system_prompt.txt es opcional, permitir que no exista
             self.system_prompt = new_prompt or ""
+            self.agents = new_agents
             logger.info("✅ Recursos recargados exitosamente")
             return True
         except Exception as e:
@@ -389,12 +357,30 @@ class WhatsAppBot:
 
         def _process():
             try:
-                session_id = self.config_repo.get("claude_session_id")
-                response, new_session_id = self.claude_client.ask(prompt, session_id)
+                # Cargar agentes frescos antes de enviar a Claude
+                current_agents = self._load_agents()
 
-                # Guardar session_id si cambío (usando clave del work_dir actual)
-                if new_session_id and new_session_id != session_id:
-                    from .commands import _get_session_key
+                # Verificar si existe system_prompt.txt y pasar la ruta
+                system_prompt_file = None
+                if os.path.exists(self.config.system_prompt_path):
+                    system_prompt_file = self.config.system_prompt_path
+
+                # Primero intentar cargar session_id específico del work_dir actual
+                from .commands import _get_session_key
+                session_key = _get_session_key(self.config.work_dir)
+                session_id = self.config_repo.get(session_key)
+
+                # Si no hay session_id específico, usar el genérico
+                if not session_id:
+                    session_id = self.config_repo.get("claude_session_id")
+
+                # Pasar agentes y system_prompt_file a Claude
+                response, new_session_id = self.claude_client.ask(
+                    prompt, session_id, agents=current_agents, system_prompt_file=system_prompt_file
+                )
+
+                # Guardar session_id en ambas claves
+                if new_session_id:
                     session_key = _get_session_key(self.config.work_dir)
                     self.config_repo.set(session_key, new_session_id)
                     self.config_repo.set("claude_session_id", new_session_id)
