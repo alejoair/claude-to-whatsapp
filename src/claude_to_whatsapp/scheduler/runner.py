@@ -37,6 +37,7 @@ class TaskScheduler:
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._tasks: Dict[str, Task] = {}
+        self._task_mtimes: Dict[str, float] = {}  # Track file modification times
         self._check_interval = 60  # Verificar cada 60 segundos
 
     def start(self) -> None:
@@ -60,12 +61,16 @@ class TaskScheduler:
     def _load_all_tasks(self) -> None:
         """Carga todas las tareas del directorio."""
         self._tasks.clear()
+        self._task_mtimes.clear()
         for task_file in self.tasks_dir.glob("*.json"):
             try:
+                task_id = task_file.stem
+                mtime = task_file.stat().st_mtime
                 with open(task_file, "r", encoding="utf-8") as f:
                     task = Task.from_json(f.read())
                 if task.enabled:
                     self._tasks[task.id] = task
+                    self._task_mtimes[task_id] = mtime
                     self._calculate_next_run(task)
                     logger.debug(f"📅 Tarea cargada: {task.id} - next: {task.next_run}")
             except Exception as e:
@@ -83,19 +88,49 @@ class TaskScheduler:
             time.sleep(self._check_interval)
 
     def _check_for_new_tasks(self) -> None:
-        """Verifica si hay tareas nuevas o modificadas."""
+        """Verifica si hay tareas nuevas, eliminadas o modificadas."""
+        current_files = {}
+
+        # Escanear archivos actuales
         for task_file in self.tasks_dir.glob("*.json"):
             task_id = task_file.stem
-            if task_id not in self._tasks:
+            current_files[task_id] = task_file.stat().st_mtime
+
+        # Detectar tareas eliminadas
+        for task_id in list(self._tasks.keys()):
+            if task_id not in current_files:
+                del self._tasks[task_id]
+                self._task_mtimes.pop(task_id, None)
+                logger.info(f"📅 Tarea eliminada: {task_id}")
+
+        # Detectar tareas nuevas o modificadas
+        for task_id, mtime in current_files.items():
+            old_mtime = self._task_mtimes.get(task_id)
+
+            if task_id not in self._tasks or (old_mtime and mtime > old_mtime):
+                # Tarea nueva o modificada
                 try:
+                    task_file = self.tasks_dir / f"{task_id}.json"
                     with open(task_file, "r", encoding="utf-8") as f:
                         task = Task.from_json(f.read())
+
+                    self._task_mtimes[task_id] = mtime
+
                     if task.enabled:
                         self._tasks[task.id] = task
                         self._calculate_next_run(task)
-                        logger.info(f"📅 Nueva tarea detectada: {task.id}")
+
+                        if old_mtime:
+                            logger.info(f"📅 Tarea modificada: {task.id}")
+                        else:
+                            logger.info(f"📅 Nueva tarea detectada: {task.id}")
+                    elif task_id in self._tasks:
+                        # Tarea deshabilitada, remover de memoria
+                        del self._tasks[task_id]
+                        logger.info(f"📅 Tarea deshabilitada: {task_id}")
+
                 except Exception as e:
-                    logger.error(f"❌ Error cargando nueva tarea: {e}")
+                    logger.error(f"❌ Error cargando tarea {task_id}: {e}")
 
     def _check_tasks(self) -> None:
         """Verifica qué tareas deben ejecutarse."""
