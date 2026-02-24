@@ -13,13 +13,21 @@ def configure_logging(level: str = "INFO") -> None:
     home = os.path.expanduser("~")
     log_dir = os.path.join(home, ".claude-to-whatsapp")
     os.makedirs(log_dir, exist_ok=True)
-    log_path = os.path.join(log_dir, "whatsapp.log")
+    log_path = os.path.join(log_dir, "bot.log")
 
+    # Configurar logging base
     logging.basicConfig(
         level=getattr(logging, level.upper()),
-        format="%(asctime)s - %(levelname)s - %(message)s",
+        format="%(asctime)s.%(msecs)03d [%(name)s %(levelname)s] - %(message)s",
+        datefmt="%H:%M:%S",
         handlers=[
             logging.StreamHandler(),
             logging.FileHandler(log_path, encoding="utf-8"),
         ],
     )
+
+    # Silenciar librerías externas
+    logging.getLogger("whatsmeow").setLevel(logging.WARNING)
+    logging.getLogger("neonize").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+
