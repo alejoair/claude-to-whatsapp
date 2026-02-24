@@ -20,6 +20,7 @@ from ..integration.claude import ClaudeClient
 from ..persistence.repositories import BotConfigRepository
 from ..notifications.thread import NotificationThread
 from ..events.filters import MessageFilter
+from ..scheduler import TaskScheduler, Task, TaskType
 from .commands import CommandRegistry, BOT_PREFIX
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,12 @@ class WhatsAppBot:
         )
         self.notification_thread = NotificationThread(
             config.bot.notification_interval
+        )
+
+        # Scheduler de tareas
+        self.task_scheduler = TaskScheduler(
+            tasks_dir=config.bot.tasks_dir,
+            on_task_execute=self._execute_scheduled_task
         )
 
         # Comandos
@@ -104,6 +111,9 @@ class WhatsAppBot:
         # Iniciar thread de notificaciones
         self.notification_thread.start()
 
+        # Iniciar scheduler de tareas
+        self.task_scheduler.start()
+
         # Main loop
         self._main_loop()
 
@@ -135,6 +145,7 @@ class WhatsAppBot:
         """Gracefully shutdown the bot."""
         logger.info("👋 Cerrando sesión...")
         self.notification_thread.stop()
+        self.task_scheduler.stop()
         self.whatsapp_client.disconnect()
         logger.info("✅ Programa terminado")
 
@@ -439,3 +450,47 @@ class WhatsAppBot:
 
         thread = threading.Thread(target=_process, daemon=True)
         thread.start()
+
+    # ========== Scheduler ==========
+
+    def _execute_scheduled_task(self, task: Task) -> None:
+        """Ejecuta una tarea programada.
+
+        Args:
+            task: Tarea a ejecutar.
+        """
+        try:
+            my_number = self.config_repo.get("my_number")
+            if not my_number:
+                logger.warning("⚠️ No hay número configurado para enviar tarea")
+                return
+
+            # Crear JID para enviarse mensaje a sí mismo
+            chat_jid = JID()
+            chat_jid.User = my_number
+            chat_jid.Server = "s.whatsapp.net"
+            chat_jid.Device = 0
+            chat_jid.Integrator = 0
+            chat_jid.RawAgent = 0
+
+            if task.type == TaskType.REMINDER:
+                # Enviar recordatorio directamente
+                message = task.payload.get("message", "Recordatorio")
+                emoji_prefix = "⏰ " if "recuérdame" not in message.lower() else ""
+                self.whatsapp_client.send_message(chat_jid, f"{emoji_prefix}{message}")
+                logger.info(f"📤 Recordatorio enviado: {message}")
+
+            elif task.type == TaskType.ACTION:
+                # Ejecutar acción con Claude y enviar resultado
+                prompt = task.payload.get("prompt", "")
+                if prompt:
+                    logger.info(f"🤖 Ejecutando acción programada: {prompt[:50]}...")
+                    self._ask_claude_async(
+                        chat_jid,
+                        self.whatsapp_client,
+                        f"[Tarea programada: {task.id}] {prompt}",
+                        f"scheduled_{task.id}"
+                    )
+
+        except Exception as e:
+            logger.error(f"❌ Error ejecutando tarea {task.id}: {e}")

@@ -29,6 +29,7 @@ class BotConfig:
     data_dir: str = None  # Se setea en Config
     temp_images_dir: str = None  # Se setea en Config
     notification_interval: int = 30
+    tasks_dir: str = None  # Directorio para tareas programadas
 
 
 @dataclass
@@ -58,6 +59,10 @@ class Config:
         temp_images_dir = os.path.join(data_dir, "temp_images")
         os.makedirs(temp_images_dir, exist_ok=True)
 
+        # Directorio para tareas programadas
+        tasks_dir = os.path.join(data_dir, "tasks")
+        os.makedirs(tasks_dir, exist_ok=True)
+
         # Configurar sub-configuraciones
         self.claude = ClaudeConfig()
         self.whatsapp = WhatsAppConfig(
@@ -68,6 +73,7 @@ class Config:
             data_dir=data_dir,
             temp_images_dir=temp_images_dir,
             notification_interval=30,
+            tasks_dir=tasks_dir,
         )
 
     @property
