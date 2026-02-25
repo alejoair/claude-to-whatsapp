@@ -90,6 +90,6 @@ class NotificationThread:
 
                     try:
                         req_data["client"].send_message(req_data["chat"], time_msg)
-                        logger.info(f"📤 Notificación enviada a {chat_key}")
+                        logger.debug(f"📤 Notificación enviada a {chat_key}")
                     except Exception as e:
                         logger.error(f"❌ Error enviando notificación: {e}")

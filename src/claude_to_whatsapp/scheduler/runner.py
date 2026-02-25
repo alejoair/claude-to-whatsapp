@@ -72,7 +72,7 @@ class TaskScheduler:
                     self._tasks[task.id] = task
                     self._task_mtimes[task_id] = mtime
                     self._calculate_next_run(task)
-                    logger.debug(f"📅 Tarea cargada: {task.id} - next: {task.next_run}")
+                    logger.debug(f"📅 Tarea cargada: {task.id}")
             except Exception as e:
                 logger.error(f"❌ Error cargando tarea {task_file}: {e}")
 
@@ -101,7 +101,7 @@ class TaskScheduler:
             if task_id not in current_files:
                 del self._tasks[task_id]
                 self._task_mtimes.pop(task_id, None)
-                logger.info(f"📅 Tarea eliminada: {task_id}")
+                logger.debug(f"📅 Tarea eliminada: {task_id}")
 
         # Detectar tareas nuevas o modificadas
         for task_id, mtime in current_files.items():
@@ -121,13 +121,13 @@ class TaskScheduler:
                         self._calculate_next_run(task)
 
                         if old_mtime:
-                            logger.info(f"📅 Tarea modificada: {task.id}")
+                            logger.debug(f"📅 Tarea modificada: {task.id}")
                         else:
-                            logger.info(f"📅 Nueva tarea detectada: {task.id}")
+                            logger.info(f"📅 Nueva tarea: {task.id}")
                     elif task_id in self._tasks:
                         # Tarea deshabilitada, remover de memoria
                         del self._tasks[task_id]
-                        logger.info(f"📅 Tarea deshabilitada: {task_id}")
+                        logger.debug(f"📅 Tarea deshabilitada: {task_id}")
 
                 except Exception as e:
                     logger.error(f"❌ Error cargando tarea {task_id}: {e}")
@@ -151,7 +151,7 @@ class TaskScheduler:
 
     def _execute_task(self, task: Task) -> None:
         """Ejecuta una tarea."""
-        logger.info(f"⏰ Ejecutando tarea: {task.id} ({task.type.value})")
+        logger.debug(f"⏰ Ejecutando tarea: {task.id} ({task.type.value})")
 
         try:
             if self.on_task_execute:
@@ -159,9 +159,9 @@ class TaskScheduler:
             else:
                 # Default: solo log
                 if task.type == TaskType.REMINDER:
-                    logger.info(f"📢 Reminder: {task.payload.get('message')}")
+                    logger.debug(f"📢 Reminder: {task.payload.get('message')}")
                 elif task.type == TaskType.ACTION:
-                    logger.info(f"🤖 Action: {task.payload.get('prompt')}")
+                    logger.debug(f"🤖 Action: {task.payload.get('prompt')}")
         except Exception as e:
             logger.error(f"❌ Error ejecutando tarea {task.id}: {e}")
 
@@ -179,7 +179,7 @@ class TaskScheduler:
                 if task.id in self._tasks:
                     del self._tasks[task.id]
                 self._task_mtimes.pop(task.id, None)
-                logger.info(f"📅 Tarea {task.id} completada y eliminada (once)")
+                logger.debug(f"📅 Tarea {task.id} completada y eliminada (once)")
             except Exception as e:
                 logger.error(f"❌ Error eliminando tarea {task.id}: {e}")
         else:

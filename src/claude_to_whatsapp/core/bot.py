@@ -224,13 +224,13 @@ class WhatsAppBot:
             has_image = MessageFilter.has_image(message)
             image_path = None
 
-            logger.info(f"📥 Mensaje recibido - IsFromMe: {msg_source.IsFromMe}, Sender: {msg_source.Sender.User}, Chat: {msg_source.Chat.User}, Text: {text}, Image: {has_image}")
+            logger.debug(f"📥 Mensaje recibido - IsFromMe: {msg_source.IsFromMe}, Sender: {msg_source.Sender.User}, Chat: {msg_source.Chat.User}")
 
             # Si hay imagen, descargarla
             if has_image:
                 image_path = self._download_image(message)
                 if image_path:
-                    logger.info(f"📷 Imagen descargada: {image_path}")
+                    logger.debug(f"📷 Imagen descargada: {image_path}")
                     # Usar caption como texto si existe
                     if not text:
                         text = MessageFilter.extract_image_caption(message) or "Analiza esta imagen"
@@ -243,12 +243,12 @@ class WhatsAppBot:
 
             # Filtrar mensajes del sistema
             if text and MessageFilter.is_system_message(text):
-                logger.info("⏭️ Ignorando mensaje del sistema")
+                logger.debug("⏭️ Ignorando mensaje del sistema")
                 return
 
             # Filtrar: solo self-messages
             if not MessageFilter.is_self_message(msg_source):
-                logger.info("⏭️ Ignorando mensaje (no es self-message)")
+                logger.debug("⏭️ Ignorando mensaje (no es self-message)")
                 return
 
             logger.info(f"💬 Mensaje procesado: {text}")
@@ -354,7 +354,7 @@ class WhatsAppBot:
 
             if agents:
                 agents_json = json.dumps(agents)
-                logger.info(f"📜 {len(agents)} agentes cargados")
+                logger.debug(f"📜 {len(agents)} agentes cargados")
                 return agents_json
 
         except Exception as e:
@@ -431,7 +431,7 @@ class WhatsAppBot:
                     prompt, session_id, agents=current_agents, system_prompt_file=system_prompt_file
                 )
 
-                logger.info(f"🤖 Respuesta de Claude: {response[:200]}...")
+                logger.debug(f"🤖 Respuesta de Claude: {response[:200]}...")
 
                 # Guardar session_id en ambas claves
                 if new_session_id:
@@ -441,7 +441,7 @@ class WhatsAppBot:
 
                 # Enviar respuesta
                 client.send_message(chat, f"{BOT_PREFIX}{response}")
-                logger.info(f"📤 Respuesta enviada")
+                logger.debug(f"📤 Respuesta enviada")
 
             except Exception as e:
                 logger.error(f"❌ Error en thread de Claude: {e}")

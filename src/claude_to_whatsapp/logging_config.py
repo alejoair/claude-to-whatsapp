@@ -4,11 +4,12 @@ import logging
 import os
 
 
-def configure_logging(level: str = "INFO") -> None:
+def configure_logging(level: str = "WARNING") -> None:
     """Configure logging for the application.
 
     Args:
         level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+               Default is WARNING to reduce verbosity.
     """
     home = os.path.expanduser("~")
     log_dir = os.path.join(home, ".claude-to-whatsapp")
@@ -27,7 +28,8 @@ def configure_logging(level: str = "INFO") -> None:
     )
 
     # Silenciar librerías externas
-    logging.getLogger("whatsmeow").setLevel(logging.WARNING)
-    logging.getLogger("neonize").setLevel(logging.WARNING)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("whatsmeow").setLevel(logging.ERROR)
+    logging.getLogger("neonize").setLevel(logging.ERROR)
+    logging.getLogger("urllib3").setLevel(logging.ERROR)
+
 

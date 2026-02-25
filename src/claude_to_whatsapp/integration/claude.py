@@ -44,7 +44,7 @@ class ClaudeClient(AIModelClient):
         cmd = self._build_command(prompt, session_id, agents, system_prompt_file)
 
         try:
-            logger.info(f"🤖 Enviando a Claude: {prompt[:50]}...")
+            logger.debug(f"🤖 Enviando a Claude: {prompt[:50]}...")
             logger.debug(f"📝 system_prompt_file: {system_prompt_file}")
             result = subprocess.run(
                 cmd,
