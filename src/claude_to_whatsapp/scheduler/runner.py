@@ -49,14 +49,14 @@ class TaskScheduler:
         self._load_all_tasks()
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
-        logger.info(f"📅 Scheduler iniciado - {len(self._tasks)} tareas cargadas")
+        logger.debug(f"📅 Scheduler iniciado - {len(self._tasks)} tareas")
 
     def stop(self) -> None:
         """Detiene el scheduler."""
         self._running = False
         if self._thread:
             self._thread.join(timeout=5)
-        logger.info("📅 Scheduler detenido")
+        logger.debug("📅 Scheduler detenido")
 
     def _load_all_tasks(self) -> None:
         """Carga todas las tareas del directorio."""

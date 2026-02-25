@@ -54,7 +54,7 @@ class WhatsAppClient(MessageClient):
 
     def _on_disconnected(self, client: NewClient, event: DisconnectedEv) -> None:
         """Manejar evento de desconexión."""
-        logger.warning("[WhatsAppClient] Desconectado de WhatsApp")
+        logger.debug("[WhatsAppClient] Desconectado de WhatsApp")
         if self._auto_reconnect:
             time.sleep(5)  # Esperar antes de reconectar
             if self._should_run:
@@ -62,7 +62,7 @@ class WhatsAppClient(MessageClient):
 
     def _on_stream_error(self, client: NewClient, event: StreamErrorEv) -> None:
         """Manejar errores de stream."""
-        logger.warning(f"[WhatsAppClient] Error de stream")
+        logger.debug("[WhatsAppClient] Error de stream")
         if self._auto_reconnect:
             time.sleep(3)
             if self._should_run:

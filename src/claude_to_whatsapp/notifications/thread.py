@@ -61,14 +61,12 @@ class NotificationThread:
 
         self.thread = threading.Thread(target=_loop, daemon=True)
         self.thread.start()
-        logger.info("✅ Thread de notificaciones iniciado")
 
     def stop(self) -> None:
         """Stop the notification thread."""
         self.running = False
         if self.thread:
             self.thread.join(timeout=5)
-        logger.info("🛑 Thread de notificaciones detenido")
 
     def _send_notifications(self) -> None:
         """Send notifications for pending requests."""

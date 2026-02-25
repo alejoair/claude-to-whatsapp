@@ -88,8 +88,6 @@ class WhatsAppBot:
         logger.info("=" * 50)
         logger.info("claude-to-whatsapp v0.1.0")
         logger.info("=" * 50)
-        logger.info(f"📂 DB WhatsApp: {self.config.whatsapp.db_path}")
-        logger.info(f"📜 Dir trabajo: {self.config.work_dir}")
 
         # Configurar eventos de WhatsApp
         self.whatsapp_client.register_handler(ConnectedEv, self.on_connected)
@@ -119,8 +117,7 @@ class WhatsAppBot:
 
     def _main_loop(self) -> None:
         """Main bot loop."""
-        logger.info("\n✅ Bot activo. Presiona Ctrl+C para detener...")
-        logger.info("📨 Esperando mensajes...")
+        logger.info("✅ Bot activo")
 
         running = True
         try:
@@ -133,21 +130,21 @@ class WhatsAppBot:
                     # Nota: _startup_message_sent se marca True dentro del thread
 
                 if self._connect_thread and not self._connect_thread.is_alive():
-                    logger.warning("⚠️ La conexión de WhatsApp terminó")
+                    logger.debug("Conexión de WhatsApp terminó")
                     running = False
         except (KeyboardInterrupt, SystemExit):
-            logger.info("\n⚠️ Interrumpido")
+            logger.debug("Interrumpido")
             running = False
 
         self.shutdown()
 
     def shutdown(self) -> None:
         """Gracefully shutdown the bot."""
-        logger.info("👋 Cerrando sesión...")
+        logger.debug("Cerrando sesión...")
         self.notification_thread.stop()
         self.task_scheduler.stop()
         self.whatsapp_client.disconnect()
-        logger.info("✅ Programa terminado")
+        logger.info("✅ Bot detenido")
 
     # ========== Eventos de WhatsApp ==========
 
@@ -376,6 +373,13 @@ class WhatsAppBot:
             Path to downloaded image or None if failed.
         """
         try:
+            # Verificar que realmente hay imagen con directPath
+            msg = message.Message
+            if not hasattr(msg, "imageMessage") or not msg.imageMessage:
+                return None
+            if not msg.imageMessage.directPath:
+                return None
+
             import datetime
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"image_{timestamp}.jpg"
@@ -385,7 +389,7 @@ class WhatsAppBot:
             self.whatsapp_client.download_media(message, image_path)
             return image_path
         except Exception as e:
-            logger.error(f"❌ Error descargando imagen: {e}")
+            logger.debug(f"Error descargando imagen: {e}")
             return None
 
     def _ask_claude_async(self, chat, client: WhatsAppClient, prompt: str, chat_key: str, image_path: str = None) -> None:
