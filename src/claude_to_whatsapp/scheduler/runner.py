@@ -171,15 +171,21 @@ class TaskScheduler:
         task.last_run = now.isoformat()
 
         if task.schedule.type == ScheduleType.ONCE:
-            # Tareas de una sola vez se deshabilitan
-            task.enabled = False
-            task.next_run = None
-            logger.info(f"📅 Tarea {task.id} completada (once)")
+            # Tareas de una sola vez: eliminar archivo y de memoria
+            task_file = self.tasks_dir / f"{task.id}.json"
+            try:
+                if task_file.exists():
+                    task_file.unlink()
+                if task.id in self._tasks:
+                    del self._tasks[task.id]
+                self._task_mtimes.pop(task.id, None)
+                logger.info(f"📅 Tarea {task.id} completada y eliminada (once)")
+            except Exception as e:
+                logger.error(f"❌ Error eliminando tarea {task.id}: {e}")
         else:
             self._calculate_next_run(task)
-
-        # Guardar cambios
-        self._save_task(task)
+            # Guardar cambios
+            self._save_task(task)
 
     def _calculate_next_run(self, task: Task) -> None:
         """Calcula la próxima ejecución de una tarea."""
